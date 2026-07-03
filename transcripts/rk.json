@@ -1,0 +1,955 @@
+{
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 4.72,
+      "text": "You've built a rag pipeline."
+    },
+    {
+      "start": 2.24,
+      "end": 7.8,
+      "text": "You have a vector database and embedding"
+    },
+    {
+      "start": 4.72,
+      "end": 9.24,
+      "text": "model. Everything is connected. You ask"
+    },
+    {
+      "start": 7.8,
+      "end": 11.6,
+      "text": "it a question"
+    },
+    {
+      "start": 9.24,
+      "end": 13.76,
+      "text": "and it gives you a confident,"
+    },
+    {
+      "start": 11.6,
+      "end": 14.96,
+      "text": "well-structured, completely wrong"
+    },
+    {
+      "start": 13.76,
+      "end": 17.8,
+      "text": "answer."
+    },
+    {
+      "start": 14.96,
+      "end": 19.6,
+      "text": "The chunks it retrieved look relevant."
+    },
+    {
+      "start": 17.8,
+      "end": 20.84,
+      "text": "It's It's pulled down from the right"
+    },
+    {
+      "start": 19.6,
+      "end": 23.08,
+      "text": "PDF,"
+    },
+    {
+      "start": 20.84,
+      "end": 25.08,
+      "text": "but it's not the right answer."
+    },
+    {
+      "start": 23.08,
+      "end": 26.72,
+      "text": "That's not a retrieval problem. That's a"
+    },
+    {
+      "start": 25.08,
+      "end": 29.96,
+      "text": "ranking problem."
+    },
+    {
+      "start": 26.72,
+      "end": 33.48,
+      "text": "If query heart failure treatment might"
+    },
+    {
+      "start": 29.96,
+      "end": 35.88,
+      "text": "pull back chunks about cardiac arrest"
+    },
+    {
+      "start": 33.48,
+      "end": 39.52,
+      "text": "when you actually needed heart failure"
+    },
+    {
+      "start": 35.88,
+      "end": 41.8,
+      "text": "management and other similar things."
+    },
+    {
+      "start": 39.52,
+      "end": 45.08,
+      "text": "A reranker doesn't replace your vector"
+    },
+    {
+      "start": 41.8,
+      "end": 48.12,
+      "text": "search. It works after it."
+    },
+    {
+      "start": 45.08,
+      "end": 50.84,
+      "text": "You retrieve the top 20 candidates, top"
+    },
+    {
+      "start": 48.12,
+      "end": 53.56,
+      "text": "20 chunks similar to your query, and"
+    },
+    {
+      "start": 50.84,
+      "end": 57.16,
+      "text": "then you hand them one by one"
+    },
+    {
+      "start": 53.56,
+      "end": 60.32,
+      "text": "to a reranker model that reads the query"
+    },
+    {
+      "start": 57.16,
+      "end": 63.2,
+      "text": "and the chunks put together and asks,"
+    },
+    {
+      "start": 60.32,
+      "end": 64.72,
+      "text": "\"How relevant is this chunk to the"
+    },
+    {
+      "start": 63.2,
+      "end": 68.0,
+      "text": "user's query?\""
+    },
+    {
+      "start": 64.72,
+      "end": 70.24,
+      "text": "And the result is a reordered short list"
+    },
+    {
+      "start": 68.0,
+      "end": 71.76,
+      "text": "where rank one actually deserves to be"
+    },
+    {
+      "start": 70.24,
+      "end": 74.2,
+      "text": "rank one."
+    },
+    {
+      "start": 71.76,
+      "end": 77.28,
+      "text": "In this video, we are going to break"
+    },
+    {
+      "start": 74.2,
+      "end": 79.72,
+      "text": "down exactly how rerankers work"
+    },
+    {
+      "start": 77.28,
+      "end": 82.36,
+      "text": "and when you should and shouldn't use"
+    },
+    {
+      "start": 79.72,
+      "end": 83.84,
+      "text": "them in your pipeline."
+    },
+    {
+      "start": 82.36,
+      "end": 87.04,
+      "text": "Let's get into it."
+    },
+    {
+      "start": 83.84,
+      "end": 89.2,
+      "text": "All right. The way rerankers work is"
+    },
+    {
+      "start": 87.04,
+      "end": 91.56,
+      "text": "the user sends a query"
+    },
+    {
+      "start": 89.2,
+      "end": 93.84,
+      "text": "best practices for rag."
+    },
+    {
+      "start": 91.56,
+      "end": 96.52,
+      "text": "The query is embedded,"
+    },
+    {
+      "start": 93.84,
+      "end": 99.48,
+      "text": "sent to the vector database,"
+    },
+    {
+      "start": 96.52,
+      "end": 100.88,
+      "text": "and then the top key chunks are pulled."
+    },
+    {
+      "start": 99.48,
+      "end": 102.68,
+      "text": "In this case,"
+    },
+    {
+      "start": 100.88,
+      "end": 106.64,
+      "text": "it's 10. You can specify the number of"
+    },
+    {
+      "start": 102.68,
+      "end": 109.12,
+      "text": "chunks. It could be 12, 15, 25."
+    },
+    {
+      "start": 106.64,
+      "end": 110.76,
+      "text": "Doesn't matter. Then,"
+    },
+    {
+      "start": 109.12,
+      "end": 113.92,
+      "text": "those chunks"
+    },
+    {
+      "start": 110.76,
+      "end": 116.56,
+      "text": "plus the user's query"
+    },
+    {
+      "start": 113.92,
+      "end": 119.48,
+      "text": "are sent to the reranker model,"
+    },
+    {
+      "start": 116.56,
+      "end": 122.6,
+      "text": "which then spits out top end chunks. In"
+    },
+    {
+      "start": 119.48,
+      "end": 126.32,
+      "text": "this case, it's four. It can be five,"
+    },
+    {
+      "start": 122.6,
+      "end": 128.039,
+      "text": "six, depending on the amount of chunks"
+    },
+    {
+      "start": 126.32,
+      "end": 131.6,
+      "text": "you want returned from the reranker"
+    },
+    {
+      "start": 128.039,
+      "end": 133.04,
+      "text": "model. And then, these chunks are sent"
+    },
+    {
+      "start": 131.6,
+      "end": 134.72,
+      "text": "to the LLM"
+    },
+    {
+      "start": 133.04,
+      "end": 137.12,
+      "text": "which in turn generates a final"
+    },
+    {
+      "start": 134.72,
+      "end": 140.6,
+      "text": "response. Now, how this is different"
+    },
+    {
+      "start": 137.12,
+      "end": 142.2,
+      "text": "from the traditional rag is in normal"
+    },
+    {
+      "start": 140.6,
+      "end": 145.08,
+      "text": "rag"
+    },
+    {
+      "start": 142.2,
+      "end": 147.08,
+      "text": "you get a query, you embed it,"
+    },
+    {
+      "start": 145.08,
+      "end": 148.8,
+      "text": "pull the top 10"
+    },
+    {
+      "start": 147.08,
+      "end": 150.8,
+      "text": "specified number of chunks you want,"
+    },
+    {
+      "start": 148.8,
+      "end": 153.72,
+      "text": "let's say four, you pull the top four"
+    },
+    {
+      "start": 150.8,
+      "end": 154.92,
+      "text": "chunks, and then you send it to this"
+    },
+    {
+      "start": 153.72,
+      "end": 156.88,
+      "text": "LLM."
+    },
+    {
+      "start": 154.92,
+      "end": 158.92,
+      "text": "But in this case"
+    },
+    {
+      "start": 156.88,
+      "end": 161.76,
+      "text": "you send your embedded query into the"
+    },
+    {
+      "start": 158.92,
+      "end": 163.32,
+      "text": "vector database, it pulls the top 10"
+    },
+    {
+      "start": 161.76,
+      "end": 166.08,
+      "text": "chunks."
+    },
+    {
+      "start": 163.32,
+      "end": 169.04,
+      "text": "Those chunks are then sent to the"
+    },
+    {
+      "start": 166.08,
+      "end": 171.24,
+      "text": "reranker model along with the user's"
+    },
+    {
+      "start": 169.04,
+      "end": 172.44,
+      "text": "query. And then the reranker model"
+    },
+    {
+      "start": 171.24,
+      "end": 174.28,
+      "text": "places"
+    },
+    {
+      "start": 172.44,
+      "end": 177.0,
+      "text": "both the query and the chunks pulled"
+    },
+    {
+      "start": 174.28,
+      "end": 180.88,
+      "text": "from vector database side by side,"
+    },
+    {
+      "start": 177.0,
+      "end": 184.28,
+      "text": "checks how relevant each chunk is to the"
+    },
+    {
+      "start": 180.88,
+      "end": 185.88,
+      "text": "query, and then returns the top end"
+    },
+    {
+      "start": 184.28,
+      "end": 188.6,
+      "text": "chunks. In this case, it's four, you can"
+    },
+    {
+      "start": 185.88,
+      "end": 190.68,
+      "text": "specify five, six."
+    },
+    {
+      "start": 188.6,
+      "end": 192.92,
+      "text": "It doesn't uh matter, just specify the"
+    },
+    {
+      "start": 190.68,
+      "end": 195.28,
+      "text": "number of chunks that you want to be"
+    },
+    {
+      "start": 192.92,
+      "end": 198.519,
+      "text": "pulled from the vector database, and"
+    },
+    {
+      "start": 195.28,
+      "end": 201.32,
+      "text": "these chunks are then sent to the LLM"
+    },
+    {
+      "start": 198.519,
+      "end": 203.959,
+      "text": "which generates a final response."
+    },
+    {
+      "start": 201.32,
+      "end": 205.0,
+      "text": "Let's head over to N8N and see this in"
+    },
+    {
+      "start": 203.959,
+      "end": 208.12,
+      "text": "action."
+    },
+    {
+      "start": 205.0,
+      "end": 212.4,
+      "text": "All right, we're in N8N."
+    },
+    {
+      "start": 208.12,
+      "end": 216.36,
+      "text": "And the first workflow we're going to"
+    },
+    {
+      "start": 212.4,
+      "end": 219.56,
+      "text": "use in this example is the regular rag"
+    },
+    {
+      "start": 216.36,
+      "end": 221.6,
+      "text": "agent with a chat trigger."
+    },
+    {
+      "start": 219.56,
+      "end": 225.48,
+      "text": "The agent node, the LLM, the"
+    },
+    {
+      "start": 221.6,
+      "end": 228.64,
+      "text": "conversation memory, the vector database"
+    },
+    {
+      "start": 225.48,
+      "end": 230.56,
+      "text": "node, and the embedding model."
+    },
+    {
+      "start": 228.64,
+      "end": 233.88,
+      "text": "While the other workflow"
+    },
+    {
+      "start": 230.56,
+      "end": 236.36,
+      "text": "is the same agent, but this time with"
+    },
+    {
+      "start": 233.88,
+      "end": 239.52,
+      "text": "the reranker model, which it's going to"
+    },
+    {
+      "start": 236.36,
+      "end": 241.8,
+      "text": "use to rerank the results that we get"
+    },
+    {
+      "start": 239.52,
+      "end": 244.16,
+      "text": "from our vector database before feeding"
+    },
+    {
+      "start": 241.8,
+      "end": 247.08,
+      "text": "it to the LLM to generate the response."
+    },
+    {
+      "start": 244.16,
+      "end": 250.16,
+      "text": "All right, so let's test the first one."
+    },
+    {
+      "start": 247.08,
+      "end": 253.44,
+      "text": "We're going to send a message."
+    },
+    {
+      "start": 250.16,
+      "end": 258.959,
+      "text": "We'll ask, \"How did Apple's revenue"
+    },
+    {
+      "start": 253.44,
+      "end": 258.959,
+      "text": "growth in 2024 compared to Nvidia's?\""
+    },
+    {
+      "start": 262.4,
+      "end": 267.64,
+      "text": "It's making the search."
+    },
+    {
+      "start": 265.12,
+      "end": 270.04,
+      "text": "Okay. \"I couldn't find specific"
+    },
+    {
+      "start": 267.64,
+      "end": 272.36,
+      "text": "information about Apple's revenue growth"
+    },
+    {
+      "start": 270.04,
+      "end": 275.28,
+      "text": "or I compared to Nvidia."
+    },
+    {
+      "start": 272.36,
+      "end": 277.68,
+      "text": "However, I did find a few details about"
+    },
+    {
+      "start": 275.28,
+      "end": 281.44,
+      "text": "Nvidia's revenue."
+    },
+    {
+      "start": 277.68,
+      "end": 283.0,
+      "text": "This, this, this increased by 244%."
+    },
+    {
+      "start": 281.44,
+      "end": 286.84,
+      "text": "All right, so we did not get a full"
+    },
+    {
+      "start": 283.0,
+      "end": 289.88,
+      "text": "response because we are pulling four"
+    },
+    {
+      "start": 286.84,
+      "end": 292.68,
+      "text": "chunks. Yeah, we're pulling the top four"
+    },
+    {
+      "start": 289.88,
+      "end": 294.6,
+      "text": "chunks similar to the user's query from"
+    },
+    {
+      "start": 292.68,
+      "end": 296.96,
+      "text": "the vector database. Let's see if we get"
+    },
+    {
+      "start": 294.6,
+      "end": 300.48,
+      "text": "a different response with the reranker"
+    },
+    {
+      "start": 296.96,
+      "end": 303.6,
+      "text": "one. So, send the same question."
+    },
+    {
+      "start": 300.48,
+      "end": 305.44,
+      "text": "\"How did Apple's growth in 2024 compared"
+    },
+    {
+      "start": 303.6,
+      "end": 307.76,
+      "text": "to Nvidia's?\""
+    },
+    {
+      "start": 305.44,
+      "end": 309.96,
+      "text": "All right. So,"
+    },
+    {
+      "start": 307.76,
+      "end": 312.56,
+      "text": "what the reranker does, I mean, sorry,"
+    },
+    {
+      "start": 309.96,
+      "end": 314.919,
+      "text": "what this agent does, rather, is it"
+    },
+    {
+      "start": 312.56,
+      "end": 317.919,
+      "text": "sends a request."
+    },
+    {
+      "start": 314.919,
+      "end": 320.2,
+      "text": "The LLM sends the user's query to the"
+    },
+    {
+      "start": 317.919,
+      "end": 322.6,
+      "text": "vector database."
+    },
+    {
+      "start": 320.2,
+      "end": 325.48,
+      "text": "Then, the chunks are pulled, which is"
+    },
+    {
+      "start": 322.6,
+      "end": 327.68,
+      "text": "then sent off to the reranker model,"
+    },
+    {
+      "start": 325.48,
+      "end": 330.28,
+      "text": "which examines the chunks pulled from"
+    },
+    {
+      "start": 327.68,
+      "end": 333.04,
+      "text": "the vector database and the user's"
+    },
+    {
+      "start": 330.28,
+      "end": 335.96,
+      "text": "query. And then, it calculates a"
+    },
+    {
+      "start": 333.04,
+      "end": 338.4,
+      "text": "relevance score of each chunk pulled"
+    },
+    {
+      "start": 335.96,
+      "end": 341.8,
+      "text": "from the vector database to the user's"
+    },
+    {
+      "start": 338.4,
+      "end": 343.44,
+      "text": "query. And then, it sorts them in"
+    },
+    {
+      "start": 341.8,
+      "end": 347.44,
+      "text": "descending order. So, you can see the"
+    },
+    {
+      "start": 343.44,
+      "end": 351.64,
+      "text": "first chunk it pulled is 0.91"
+    },
+    {
+      "start": 347.44,
+      "end": 354.52,
+      "text": "relevance. The other one is 0.90."
+    },
+    {
+      "start": 351.64,
+      "end": 358.08,
+      "text": "Third one is 0.83."
+    },
+    {
+      "start": 354.52,
+      "end": 361.96,
+      "text": "And last one is 0.76. You can specify"
+    },
+    {
+      "start": 358.08,
+      "end": 363.64,
+      "text": "the number of chunks you want to pull"
+    },
+    {
+      "start": 361.96,
+      "end": 365.88,
+      "text": "and send to the LLM. And in this case,"
+    },
+    {
+      "start": 363.64,
+      "end": 369.68,
+      "text": "we specified five. You can set this to"
+    },
+    {
+      "start": 365.88,
+      "end": 373.0,
+      "text": "20, 30, depending on how the document"
+    },
+    {
+      "start": 369.68,
+      "end": 375.28,
+      "text": "are and the level of accuracy you want"
+    },
+    {
+      "start": 373.0,
+      "end": 377.6,
+      "text": "to get from your response. Now, this is"
+    },
+    {
+      "start": 375.28,
+      "end": 379.56,
+      "text": "a good response. In 2024, Apple's"
+    },
+    {
+      "start": 377.6,
+      "end": 382.44,
+      "text": "revenue grew significantly, reaching"
+    },
+    {
+      "start": 379.56,
+      "end": 385.919,
+      "text": "60.9 billion. This is correct, which"
+    },
+    {
+      "start": 382.44,
+      "end": 388.4,
+      "text": "represented a 126% increase compared to"
+    },
+    {
+      "start": 385.919,
+      "end": 391.16,
+      "text": "the previous year. On the other hand,"
+    },
+    {
+      "start": 388.4,
+      "end": 393.0,
+      "text": "Nvidia's revenue also saw"
+    },
+    {
+      "start": 391.16,
+      "end": 396.08,
+      "text": "Yeah. So, basically, this response is"
+    },
+    {
+      "start": 393.0,
+      "end": 399.16,
+      "text": "correct. We asked how Apple's revenue"
+    },
+    {
+      "start": 396.08,
+      "end": 402.88,
+      "text": "growth in 2024 compared to Nvidia. So,"
+    },
+    {
+      "start": 399.16,
+      "end": 405.76,
+      "text": "it's expected to look at Apple's revenue"
+    },
+    {
+      "start": 402.88,
+      "end": 407.88,
+      "text": "in 2024 and Nvidia's revenue and then"
+    },
+    {
+      "start": 405.76,
+      "end": 411.68,
+      "text": "compare and then generate a response,"
+    },
+    {
+      "start": 407.88,
+      "end": 414.96,
+      "text": "which it did. So, now let's cover"
+    },
+    {
+      "start": 411.68,
+      "end": 417.64,
+      "text": "when you should not use rerankers. So,"
+    },
+    {
+      "start": 414.96,
+      "end": 421.68,
+      "text": "if you have a small set of documents,"
+    },
+    {
+      "start": 417.64,
+      "end": 423.6,
+      "text": "five to 10 documents with similar"
+    },
+    {
+      "start": 421.68,
+      "end": 425.52,
+      "text": "uh content,"
+    },
+    {
+      "start": 423.6,
+      "end": 427.68,
+      "text": "if vector search is already precise"
+    },
+    {
+      "start": 425.52,
+      "end": 430.68,
+      "text": "enough, there's no need for the"
+    },
+    {
+      "start": 427.68,
+      "end": 432.4,
+      "text": "additional reranker overhead because"
+    },
+    {
+      "start": 430.68,
+      "end": 434.6,
+      "text": "adding a reranker model means you need"
+    },
+    {
+      "start": 432.4,
+      "end": 437.08,
+      "text": "to pay. You have have some sort of"
+    },
+    {
+      "start": 434.6,
+      "end": 438.2,
+      "text": "subscription to reranker service like"
+    },
+    {
+      "start": 437.08,
+      "end": 439.96,
+      "text": "Cohere."
+    },
+    {
+      "start": 438.2,
+      "end": 443.32,
+      "text": "Another reason you might not need"
+    },
+    {
+      "start": 439.96,
+      "end": 445.88,
+      "text": "rerankers is every reranker call adds"
+    },
+    {
+      "start": 443.32,
+      "end": 448.44,
+      "text": "time. So, if you're building a real-time"
+    },
+    {
+      "start": 445.88,
+      "end": 451.88,
+      "text": "application where the agent's response"
+    },
+    {
+      "start": 448.44,
+      "end": 454.48,
+      "text": "speed is very important, like your users"
+    },
+    {
+      "start": 451.88,
+      "end": 456.919,
+      "text": "need to get fast responses,"
+    },
+    {
+      "start": 454.48,
+      "end": 460.28,
+      "text": "the accuracy gain that you get from a"
+    },
+    {
+      "start": 456.919,
+      "end": 463.44,
+      "text": "reranker might not be worth the latency"
+    },
+    {
+      "start": 460.28,
+      "end": 465.36,
+      "text": "overhead that the reranker ads."
+    },
+    {
+      "start": 463.44,
+      "end": 468.52,
+      "text": "And lastly, last reason you might not"
+    },
+    {
+      "start": 465.36,
+      "end": 470.04,
+      "text": "need a reranker model is if your"
+    },
+    {
+      "start": 468.52,
+      "end": 472.28,
+      "text": "embedding model is already"
+    },
+    {
+      "start": 470.04,
+      "end": 475.48,
+      "text": "domain-specific. So, for instance, if"
+    },
+    {
+      "start": 472.28,
+      "end": 477.48,
+      "text": "you're working on a medical agent and"
+    },
+    {
+      "start": 475.48,
+      "end": 480.12,
+      "text": "you're using"
+    },
+    {
+      "start": 477.48,
+      "end": 482.4,
+      "text": "a medical embedding model like embedding"
+    },
+    {
+      "start": 480.12,
+      "end": 485.08,
+      "text": "Gemini from Google, which has been"
+    },
+    {
+      "start": 482.4,
+      "end": 488.24,
+      "text": "fine-tuned to the niche of document in"
+    },
+    {
+      "start": 485.08,
+      "end": 490.48,
+      "text": "your vector database, there's no need to"
+    },
+    {
+      "start": 488.24,
+      "end": 493.44,
+      "text": "use a reranker."
+    },
+    {
+      "start": 490.48,
+      "end": 496.36,
+      "text": "Thank you for watching this video. Like"
+    },
+    {
+      "start": 493.44,
+      "end": 498.08,
+      "text": "and subscribe and"
+    },
+    {
+      "start": 496.36,
+      "end": 500.4,
+      "text": "see you on the next one."
+    },
+    {
+      "start": 498.08,
+      "end": 500.4,
+      "text": "Bye."
+    }
+  ],
+  "words": null
+}

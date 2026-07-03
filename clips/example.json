@@ -1,0 +1,13 @@
+[
+  {
+    "start": "00:05:30",
+    "end": "00:06:15",
+    "slug": "quick-docker-setup",
+    "hook": "Set up Docker in under a minute"
+  },
+  {
+    "start": "00:22:10",
+    "end": "00:22:55",
+    "slug": "debug-trick"
+  }
+]
