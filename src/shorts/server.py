@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import io
 import json
+import zipfile
 from pathlib import Path
 from typing import Generator
 
@@ -83,6 +85,51 @@ def create_app() -> FastAPI:
         removed = clips.pop(index)
         save_clips(name, clips)
         return removed.model_dump()
+
+    @app.get("/api/download-clip/{name}/{slug}")
+    def download_clip(name: str, slug: str):
+        """Serve an individual clip MP4 from output/."""
+        out_dir = Path("output") / name
+        if not out_dir.exists():
+            raise HTTPException(404, "No output directory found")
+
+        matches = list(out_dir.glob(f"*_{slug}.mp4"))
+        if not matches:
+            raise HTTPException(404, f"Clip not found: {slug}")
+
+        clip_path = matches[0]
+        return FileResponse(
+            clip_path,
+            media_type="video/mp4",
+            filename=clip_path.name,
+        )
+
+    @app.get("/api/download-all/{name}")
+    def download_all(name: str):
+        """Stream a zip of all clips for a project."""
+        out_dir = Path("output") / name
+        if not out_dir.exists():
+            raise HTTPException(404, "No output directory found")
+
+        mp4_files = sorted(out_dir.glob("*.mp4"))
+        if not mp4_files:
+            raise HTTPException(404, "No clips found to download")
+
+        def generate_zip():
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
+                for mp4 in mp4_files:
+                    zf.write(mp4, mp4.name)
+            buf.seek(0)
+            while chunk := buf.read(65536):
+                yield chunk
+
+        zip_filename = f"{name}_shorts.zip"
+        return StreamingResponse(
+            generate_zip(),
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'},
+        )
 
     @app.get("/api/cut/{name}")
     def cut_all(name: str, captions: bool = False, crop: str = None):

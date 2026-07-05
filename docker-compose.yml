@@ -1,0 +1,13 @@
+services:
+  shorts:
+    build: .
+    container_name: shorts
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file: .env
+    volumes:
+      - ./raw:/app/raw
+      - ./output:/app/output
+      - ./transcripts:/app/transcripts
+      - ./clips:/app/clips
+    restart: unless-stopped

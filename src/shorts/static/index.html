@@ -77,6 +77,8 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 .clip-item .del:hover { color: #f87171; background: rgba(248,113,113,0.1); }
 .clip-item .preview-clip-btn { color: #6b7280; font-size: 0.75rem; cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: all 0.15s; background: none; border: none; }
 .clip-item .preview-clip-btn:hover { color: #60a5fa; background: rgba(96,165,250,0.1); }
+.clip-item .download-clip-btn { color: #6b7280; font-size: 0.75rem; cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: all 0.15s; background: none; border: none; text-decoration: none; }
+.clip-item .download-clip-btn:hover { color: #4ade80; background: rgba(74,222,128,0.1); }
 
 /* --- Sections --- */
 .section { padding: 12px; background: #1f2937; border-radius: 8px; border: 1px solid #374151; }
@@ -219,6 +221,9 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
         <button id="cut-btn" class="btn-success" disabled>Cut All</button>
       </div>
       <div class="cut-row">
+        <button id="download-all-btn" class="btn-primary" disabled>Download All (.zip)</button>
+      </div>
+      <div class="cut-row">
         <label><input type="checkbox" id="captions-toggle"> Burn captions</label>
       </div>
       <div class="cut-row">
@@ -238,6 +243,7 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
   const timeDisplay = $('#time-display');
   const clipList = $('#clip-list');
   const cutBtn = $('#cut-btn');
+  const downloadAllBtn = $('#download-all-btn');
   const progressDiv = $('#progress');
   const cropInfo = $('#crop-info');
   const previewBtn = $('#preview-btn');
@@ -281,6 +287,8 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
     video.load();
     await fetchClips();
     cutBtn.disabled = false;
+    downloadAllBtn.disabled = false;
+    downloadAllBtn.onclick = () => { window.location.href = `/api/download-all/${projectName}`; };
     $('#status-msg').textContent = `Loaded: ${projectName}`;
   }
 
@@ -314,6 +322,8 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
       video.src = `/api/videos/${projectName}`;
       video.load();
       cutBtn.disabled = false;
+      downloadAllBtn.disabled = false;
+      downloadAllBtn.onclick = () => { window.location.href = `/api/download-all/${projectName}`; };
       $('#status-msg').textContent = `Loaded: ${projectName}`;
     } catch (e) {
       $('#download-status').textContent = `Error: ${e.message}`;
@@ -350,6 +360,8 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
       video.src = `/api/videos/${projectName}`;
       video.load();
       cutBtn.disabled = false;
+      downloadAllBtn.disabled = false;
+      downloadAllBtn.onclick = () => { window.location.href = `/api/download-all/${projectName}`; };
       $('#status-msg').textContent = `Loaded: ${projectName}`;
     } catch (e) {
       $('#download-status').textContent = `Error: ${e.message}`;
@@ -420,7 +432,7 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
       const div = document.createElement('div');
       div.className = 'clip-item';
       const dur = getClipDuration(c);
-      div.innerHTML = `<div class="info"><span class="slug">${esc(c.slug)}</span><br><span class="times">${c.start} — ${c.end}</span>${dur ? ` <span class="duration">${dur}</span>` : ''}${c.hook ? `<div class="hook">${esc(c.hook)}</div>` : ''}</div>`;
+      div.innerHTML = `<div class="info"><span class="slug">${esc(c.slug)}</span><br><span class="times">${c.start} — ${c.end}</span>${dur ? ` <span class="duration">${dur}</span>` : ''}${c.hook ? `<div class="hook">${esc(c.hook)}</div>` : ''}</div><div class="clip-actions"><a class="download-clip-btn" href="/api/download-clip/${projectName}/${c.slug}" download title="Download clip">&#8615;</a></div>`;
       div.addEventListener('click', () => seekToClip(c));
       list.appendChild(div);
     });
@@ -560,9 +572,9 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
       const div = document.createElement('div');
       div.className = 'clip-item' + (i === activeClipIdx ? ' active' : '');
       const dur = getClipDuration(c);
-      div.innerHTML = `<div class="info"><span class="slug">${esc(c.slug)}</span><div class="times">${c.start} — ${c.end}${dur ? ` <span class="duration">${dur}</span>` : ''}</div></div><div class="clip-actions"><button class="preview-clip-btn" title="Preview this clip">&#9654;</button><span class="del" title="Delete clip">&times;</span></div>`;
+      div.innerHTML = `<div class="info"><span class="slug">${esc(c.slug)}</span><div class="times">${c.start} — ${c.end}${dur ? ` <span class="duration">${dur}</span>` : ''}</div></div><div class="clip-actions"><a class="download-clip-btn" href="/api/download-clip/${projectName}/${c.slug}" download title="Download clip">&#8615;</a><button class="preview-clip-btn" title="Preview this clip">&#9654;</button><span class="del" title="Delete clip">&times;</span></div>`;
       div.addEventListener('click', (e) => {
-        if (e.target.closest('.del') || e.target.closest('.preview-clip-btn')) return;
+        if (e.target.closest('.del') || e.target.closest('.preview-clip-btn') || e.target.closest('.download-clip-btn')) return;
         activeClipIdx = i;
         selectClip(i);
       });
