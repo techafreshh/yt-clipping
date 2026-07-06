@@ -83,8 +83,18 @@ def _group_words(words: list[CaptionWord], max_group: int = 4, pause_threshold: 
     return groups
 
 
-def generate_ass(name: str, slug: str, transcript: Transcript, clip_start: float, clip_end: float) -> Path:
+def generate_ass(
+    name: str, slug: str, transcript: Transcript, clip_start: float, clip_end: float,
+    alignment: int | None = None, margin_v: int | None = None,
+) -> Path:
     """Generate an ASS subtitle file with word-by-word highlighting."""
+    from shorts.config import settings
+
+    if alignment is None:
+        alignment = settings.caption_alignment
+    if margin_v is None:
+        margin_v = settings.caption_margin_v
+
     words = _extract_words(transcript, clip_start, clip_end)
     groups = _group_words(words)
 
@@ -97,7 +107,7 @@ def generate_ass(name: str, slug: str, transcript: Transcript, clip_start: float
         "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        "Style: Default,Arial Black,68,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,2,0,1,5,0,5,40,40,100,1",
+        f"Style: Default,Arial Black,68,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,2,0,1,5,0,{alignment},40,40,{margin_v},1",
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",

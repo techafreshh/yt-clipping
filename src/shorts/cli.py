@@ -196,9 +196,13 @@ def cut(
     errors: list[str] = []
     for i, clip in enumerate(clips, 1):
         typer.echo(f"Cutting clip {i}/{len(clips)}: {clip.slug}")
+        subtitle_path = None
+        if captions:
+            subtitle_path = generate_ass(name, clip.slug, transcript, parse_timestamp(clip.start), parse_timestamp(clip.end))
+
         try:
             clip_crop = clip.crop.model_dump() if clip.crop else None
-            result = cut_clip(name, clip, remove_silence_flag=remove_silence, crop=clip_crop)
+            result = cut_clip(name, clip, remove_silence_flag=remove_silence, crop=clip_crop, subtitle_path=subtitle_path)
         except FileNotFoundError as e:
             typer.echo(f"Error: {e}", err=True)
             raise typer.Exit(1)
@@ -209,41 +213,19 @@ def cut(
                 break
             continue
 
-        subtitle_path = None
-        if captions:
-            subtitle_path = generate_ass(name, clip.slug, transcript, parse_timestamp(clip.start), parse_timestamp(clip.end))
-
         try:
-            from shorts.cutter import OUTPUT_WIDTH, OUTPUT_HEIGHT
-
-            export_path = result.video_path
-            if subtitle_path and subtitle_path.exists():
-                escaped = str(subtitle_path).replace("\\", "/").replace(":", "\\:")
-                final_path = result.video_path.with_name(f"{clip.slug}_final.mp4")
-                import subprocess
-                cmd = [
-                    "ffmpeg", "-y",
-                    "-i", str(result.video_path),
-                    "-vf", f"subtitles='{escaped}'",
-                    "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-                    "-c:a", "aac", "-pix_fmt", "yuv420p",
-                    str(final_path),
-                ]
-                subprocess.run(cmd, capture_output=True, text=True, check=True)
-                export_path = final_path
-
             from shorts.cutter import WORKING_DIR
             out_dir = Path("output") / name
             out_dir.mkdir(parents=True, exist_ok=True)
             output_path = out_dir / f"{name}_short_{i:02d}_{clip.slug}.mp4"
 
             import shutil
-            shutil.copy2(export_path, output_path)
+            shutil.copy2(result.video_path, output_path)
             typer.echo(f"  -> {output_path}")
 
             if audio:
                 audio_out = out_dir / f"{name}_short_{i:02d}_{clip.slug}_audio.wav"
-                extract_audio(export_path, f"{name}_short_{i:02d}_{clip.slug}_audio")
+                extract_audio(output_path, f"{name}_short_{i:02d}_{clip.slug}_audio")
                 import shutil as _shutil
                 _shutil.move(str(RAW_DIR / f"{name}_short_{i:02d}_{clip.slug}_audio.wav"), str(audio_out))
 

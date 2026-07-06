@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import shutil
 import subprocess
@@ -16,6 +17,45 @@ WORKING_DIR = Path("working")
 
 OUTPUT_WIDTH = 1080
 OUTPUT_HEIGHT = 1920
+
+logger = logging.getLogger(__name__)
+
+# GPU acceleration support
+_nvenc_available: bool | None = None
+
+
+def _detect_nvenc() -> bool:
+    """Detect if ffmpeg has NVENC (NVIDIA GPU encoding) support."""
+    global _nvenc_available
+    if _nvenc_available is not None:
+        return _nvenc_available
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-encoders"],
+            capture_output=True, text=True, timeout=10,
+        )
+        _nvenc_available = "h264_nvenc" in result.stdout
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        _nvenc_available = False
+    if _nvenc_available:
+        logger.info("NVENC GPU encoding available — using hardware acceleration")
+    else:
+        logger.info("NVENC not available — using CPU encoding (libx264)")
+    return _nvenc_available
+
+
+def _gpu_encode_args() -> list[str]:
+    """Return ffmpeg args for GPU-accelerated encoding when available, else CPU fallback."""
+    if _detect_nvenc():
+        return ["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "constqp", "-qp", "20"]
+    return ["-c:v", "libx264", "-preset", "fast", "-crf", "18"]
+
+
+def _gpu_decode_args() -> list[str]:
+    """Return ffmpeg args for GPU-accelerated decoding when available."""
+    if _detect_nvenc():
+        return ["-hwaccel", "cuda"]
+    return []
 
 
 class CutResult(BaseModel):
@@ -70,7 +110,10 @@ def _cut_track(input_path: Path, output_path: Path, start: float, end: float) ->
     actual = _get_duration(output_path)
     expected = end - start
     if abs(actual - expected) > 0.5:
-        cmd = ["ffmpeg", "-y", "-ss", str(start), "-to", str(end), "-i", str(input_path), "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-c:a", "aac", str(output_path)]
+        decode_args = _gpu_decode_args()
+        encode_args = _gpu_encode_args()
+        cmd = ["ffmpeg", "-y"] + decode_args + ["-ss", str(start), "-to", str(end), "-i", str(input_path),
+               *encode_args, "-c:a", "aac", str(output_path)]
         try:
             subprocess.run(cmd, capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as e:
@@ -138,20 +181,23 @@ def remove_silence(video_path: Path, output_path: Path, silent_segments: list[tu
         return []
 
     if len(segments) == 1 and abs(segments[0].orig_start) < 0.01:
-        cmd = ["ffmpeg", "-y", "-i", str(video_path), "-t", str(segments[0].orig_end)]
+        cmd = ["ffmpeg", "-y"] + _gpu_decode_args() + ["-i", str(video_path), "-t", str(segments[0].orig_end)]
     else:
         seg_dir = output_path.parent / f"segments_{output_path.stem}"
         seg_dir.mkdir(parents=True, exist_ok=True)
         seg_paths = []
+        encode_args = _gpu_encode_args()
+        decode_args = _gpu_decode_args()
 
         for i, seg in enumerate(segments):
             seg_path = seg_dir / f"seg_{i:03d}.mp4"
             cmd = [
                 "ffmpeg", "-y",
+                *decode_args,
                 "-ss", f"{seg.orig_start:.3f}",
                 "-i", str(video_path),
                 "-t", f"{seg.orig_end - seg.orig_start:.3f}",
-                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                *encode_args,
                 "-c:a", "aac",
                 "-avoid_negative_ts", "make_zero",
                 str(seg_path),
@@ -177,7 +223,7 @@ def remove_silence(video_path: Path, output_path: Path, silent_segments: list[tu
         shutil.rmtree(seg_dir, ignore_errors=True)
         return segments
 
-    cmd = cmd + ["-c:v", "libx264", "-preset", "fast", "-crf", "18", "-c:a", "aac", [str(output_path)]]
+    cmd = cmd + _gpu_encode_args() + ["-c:a", "aac", str(output_path)]
     try:
         subprocess.run(cmd, capture_output=True, text=True, check=True)
     except subprocess.CalledProcessError as e:
@@ -186,11 +232,12 @@ def remove_silence(video_path: Path, output_path: Path, silent_segments: list[tu
     return segments
 
 
-def crop_to_vertical(input_path: Path, output_path: Path, crop: dict | None = None) -> None:
+def crop_to_vertical(input_path: Path, output_path: Path, crop: dict | None = None, subtitle_path: Path | None = None) -> None:
     """Crop/scale video to 9:16 vertical format (1080x1920).
 
     Fills the entire frame — no black bars. Uses increase+crop to avoid padding.
     If crop dict provided, uses that region. Otherwise center-crops.
+    Uses GPU encoding (h264_nvenc) when available, falls back to CPU (libx264).
     """
     src_w, src_h = _probe_dimensions(input_path)
 
@@ -210,11 +257,19 @@ def crop_to_vertical(input_path: Path, output_path: Path, crop: dict | None = No
             f"crop={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}"
         )
 
+    if subtitle_path:
+        escaped = str(subtitle_path).replace("\\", "/").replace(":", "\\:")
+        filter_complex += f",subtitles='{escaped}'"
+
+    decode_args = _gpu_decode_args()
+    encode_args = _gpu_encode_args()
     cmd = [
-        "ffmpeg", "-y", "-i", str(input_path),
+        "ffmpeg", "-y",
+        *decode_args,
+        "-i", str(input_path),
         "-vf", filter_complex,
         "-map", "0:v", "-map", "0:a?",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+        *encode_args,
         "-c:a", "aac", "-pix_fmt", "yuv420p",
         str(output_path),
     ]
@@ -227,7 +282,7 @@ def crop_to_vertical(input_path: Path, output_path: Path, crop: dict | None = No
 
 def cut_clip(
     name: str, clip, remove_silence_flag: bool = False,
-    crop: dict | None = None,
+    crop: dict | None = None, subtitle_path: Path | None = None,
 ) -> CutResult:
     """Cut a clip from the source video, optionally remove silence, and crop to 9:16."""
     from shorts.highlights import parse_timestamp
@@ -262,7 +317,7 @@ def cut_clip(
                 current = nosilence
 
     vertical_out = out_dir / f"{clip.slug}_vertical.mp4"
-    crop_to_vertical(current, vertical_out, crop=crop)
+    crop_to_vertical(current, vertical_out, crop=crop, subtitle_path=subtitle_path)
 
     return CutResult(
         video_path=vertical_out,

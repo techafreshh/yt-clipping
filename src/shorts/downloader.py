@@ -17,7 +17,7 @@ SAVENOW_API = "https://p.savenow.to"
 
 
 def _download_via_savenow(url: str, output_path: Path) -> Path:
-    """Download a YouTube video via savenow.to API at1080p."""
+    """Download a YouTube video via savenow.to API at 1080p."""
     tmp_path = output_path.with_suffix('.tmp.mp4')
     with httpx.Client(timeout=300) as client:
         resp = client.get(f"{SAVENOW_API}/api/v2/download", params={
@@ -34,19 +34,37 @@ def _download_via_savenow(url: str, output_path: Path) -> Path:
         job_id = data["id"]
         progress_url = data.get("progress_url") or f"{SAVENOW_API}/api/progress?id={job_id}"
 
+        print("Polling savenow API for conversion progress...")
         for _ in range(120):
             time.sleep(2)
             prog = client.get(progress_url)
             prog.raise_for_status()
             pdata = prog.json()
 
+            progress_pct = pdata.get("progress")
+            text_status = pdata.get("text")
+            if progress_pct is not None:
+                print(f"  Conversion progress: {progress_pct}% ({text_status or 'processing'})")
+            elif text_status:
+                print(f"  Conversion status: {text_status}")
+
             if pdata.get("success") == 1 and pdata.get("download_url"):
                 dl_url = pdata["download_url"]
+                print("  Conversion complete. Starting download...")
                 with client.stream("GET", dl_url, follow_redirects=True) as r:
                     r.raise_for_status()
+                    total_bytes = int(r.headers.get("content-length", 0))
+                    bytes_downloaded = 0
                     with open(tmp_path, "wb") as f:
                         for chunk in r.iter_bytes(65536):
                             f.write(chunk)
+                            bytes_downloaded += len(chunk)
+                            if total_bytes > 0:
+                                pct = (bytes_downloaded / total_bytes) * 100
+                                print(f"  Downloaded: {bytes_downloaded / (1024*1024):.1f}MB / {total_bytes / (1024*1024):.1f}MB ({pct:.1f}%)", end="\r")
+                            else:
+                                print(f"  Downloaded: {bytes_downloaded / (1024*1024):.1f}MB", end="\r")
+                    print()
 
                 result = subprocess.run([
                     "ffmpeg", "-y", "-i", str(tmp_path),
@@ -94,6 +112,7 @@ def download_youtube(url: str, name: str) -> Path:
     except Exception:
         pass
 
+    print("Falling back to yt-dlp download...")
     cmd = [
         "yt-dlp",
         "-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]",
@@ -112,12 +131,26 @@ def download_youtube(url: str, name: str) -> Path:
     cmd.append(url)
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"yt-dlp failed: {e.stderr}")
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+        for line in process.stdout:
+            line_str = line.strip()
+            if "[download]" in line_str and "%" in line_str:
+                print(f"  yt-dlp: {line_str}", end="\r")
+            elif "[ffmpeg]" in line_str or "[Merger]" in line_str:
+                print(f"  yt-dlp: {line_str}")
+        process.wait()
+        if process.returncode != 0:
+            raise RuntimeError(f"yt-dlp process failed with exit code {process.returncode}")
     except FileNotFoundError:
         raise RuntimeError("yt-dlp not found. Install with: pip install yt-dlp")
 
+    print()
     return output_path
 
 

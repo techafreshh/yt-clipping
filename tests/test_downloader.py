@@ -92,15 +92,21 @@ def test_get_video_dimensions(tmp_path, monkeypatch):
 def test_download_youtube_success(tmp_path, monkeypatch):
     monkeypatch.setattr("shorts.downloader.RAW_DIR", tmp_path)
 
-    def mock_run(cmd, **kwargs):
-        result = MagicMock()
-        result.returncode = 0
-        # Create the output file
-        output = tmp_path / "test.mp4"
-        output.write_bytes(b"downloaded")
-        return result
+    def mock_savenow(url, dest):
+        raise Exception("savenow failed")
+    monkeypatch.setattr("shorts.downloader._download_via_savenow", mock_savenow)
 
-    monkeypatch.setattr("shorts.downloader.subprocess.run", mock_run)
+    class MockProcess:
+        def __init__(self):
+            self.stdout = ["[download] 100%"]
+            self.returncode = 0
+        def wait(self):
+            output = tmp_path / "test.mp4"
+            output.write_bytes(b"downloaded")
+            return 0
+
+    monkeypatch.setattr("shorts.downloader.subprocess.Popen", lambda *args, **kwargs: MockProcess())
+
     from shorts.downloader import download_youtube
     result = download_youtube("https://youtube.com/watch?v=abc", "test")
     assert result.exists()
@@ -109,10 +115,14 @@ def test_download_youtube_success(tmp_path, monkeypatch):
 def test_download_youtube_ytdlp_not_found(tmp_path, monkeypatch):
     monkeypatch.setattr("shorts.downloader.RAW_DIR", tmp_path)
 
-    def mock_run(cmd, **kwargs):
-        raise FileNotFoundError("yt-dlp not found")
+    def mock_savenow(url, dest):
+        raise Exception("savenow failed")
+    monkeypatch.setattr("shorts.downloader._download_via_savenow", mock_savenow)
 
-    monkeypatch.setattr("shorts.downloader.subprocess.run", mock_run)
+    def mock_popen(*args, **kwargs):
+        raise FileNotFoundError("yt-dlp not found")
+    monkeypatch.setattr("shorts.downloader.subprocess.Popen", mock_popen)
+
     from shorts.downloader import download_youtube
     with pytest.raises(RuntimeError, match="yt-dlp not found"):
         download_youtube("https://youtube.com/watch?v=abc", "test")

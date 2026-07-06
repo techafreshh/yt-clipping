@@ -169,9 +169,6 @@ def create_app() -> FastAPI:
                 slug = clip.slug
                 yield f"data: {json.dumps({'clip': slug, 'status': 'cutting', 'index': i, 'total': total})}\n\n"
                 try:
-                    clip_crop = global_crop or (clip.crop.model_dump() if clip.crop else None)
-                    result = cut_clip(name, clip, crop=clip_crop)
-
                     subtitle_path = None
                     if captions and transcript:
                         subtitle_path = generate_ass(
@@ -179,20 +176,8 @@ def create_app() -> FastAPI:
                             parse_timestamp(clip.start), parse_timestamp(clip.end),
                         )
 
-                    if subtitle_path and subtitle_path.exists():
-                        escaped = str(subtitle_path).replace("\\", "/").replace(":", "\\:")
-                        final_path = result.video_path.with_name(f"{slug}_final.mp4")
-                        import subprocess
-                        cmd = [
-                            "ffmpeg", "-y",
-                            "-i", str(result.video_path),
-                            "-vf", f"subtitles='{escaped}'",
-                            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-                            "-c:a", "aac", "-pix_fmt", "yuv420p",
-                            str(final_path),
-                        ]
-                        subprocess.run(cmd, capture_output=True, text=True, check=True)
-                        result.video_path = final_path
+                    clip_crop = global_crop or (clip.crop.model_dump() if clip.crop else None)
+                    result = cut_clip(name, clip, crop=clip_crop, subtitle_path=subtitle_path)
 
                     out_dir = Path("output") / name
                     out_dir.mkdir(parents=True, exist_ok=True)

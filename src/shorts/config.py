@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     default_clip_duration_min: int = 30
     default_clip_duration_max: int = 300
     youtube_proxy: Optional[str] = None
+    caption_alignment: int = 2
+    caption_margin_v: int = 480
+    n8n_webhook_url: Optional[str] = None
 
 
 def require(settings: Settings, field_name: str) -> str:

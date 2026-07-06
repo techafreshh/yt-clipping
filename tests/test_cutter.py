@@ -15,6 +15,11 @@ from shorts.highlights import Clip
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def mock_detect_nvenc(monkeypatch):
+    monkeypatch.setattr("shorts.cutter._detect_nvenc", lambda: False)
+
+
 # --- _get_duration ---
 
 

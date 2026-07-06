@@ -101,41 +101,18 @@ def run_pipeline(
     success = 0
     failed = 0
     errors: list[str] = []
+    exported_clips = []
     for i, clip in enumerate(clips, 1):
         log(f"  Clip {i}/{total}: {clip.slug}")
         try:
-            clip_crop = crop or (clip.crop.model_dump() if clip.crop else None)
-            result = cut_clip(name, clip, remove_silence_flag=remove_silence, crop=clip_crop)
-        except FileNotFoundError:
-            raise
-        except RuntimeError as e:
-            log(f"    Warning: cut failed - {e}")
-            errors.append(f"{clip.slug}: {e}")
-            failed += 1
-            if fail_fast:
-                break
-            continue
-
-        try:
             subtitle_path = None
             if captions:
+                log("    Generating subtitles...")
                 subtitle_path = generate_ass(name, clip.slug, cached, parse_timestamp(clip.start), parse_timestamp(clip.end))
 
-            from shorts.cutter import WORKING_DIR, OUTPUT_WIDTH, OUTPUT_HEIGHT
-            if subtitle_path and subtitle_path.exists():
-                escaped = str(subtitle_path).replace("\\", "/").replace(":", "\\:")
-                vertical_with_subs = result.video_path.with_name(f"{clip.slug}_final.mp4")
-                import subprocess
-                cmd = [
-                    "ffmpeg", "-y",
-                    "-i", str(result.video_path),
-                    "-vf", f"subtitles='{escaped}'",
-                    "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-                    "-c:a", "aac", "-pix_fmt", "yuv420p",
-                    str(vertical_with_subs),
-                ]
-                subprocess.run(cmd, capture_output=True, text=True, check=True)
-                result.video_path = vertical_with_subs
+            log("    Rendering video (cutting, cropping, and burning captions in single pass)...")
+            clip_crop = crop or (clip.crop.model_dump() if clip.crop else None)
+            result = cut_clip(name, clip, remove_silence_flag=remove_silence, crop=clip_crop, subtitle_path=subtitle_path)
 
             out_dir = Path("output") / name
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -143,13 +120,44 @@ def run_pipeline(
 
             import shutil
             shutil.copy2(result.video_path, output_path)
-            log(f"  -> {output_path}")
+            log(f"    -> {output_path}")
             success += 1
-        except RuntimeError as e:
-            log(f"    Warning: export failed - {e}")
+            exported_clips.append({
+                "slug": clip.slug,
+                "start": clip.start,
+                "end": clip.end,
+                "hook": getattr(clip, "hook", ""),
+                "output_path": str(output_path),
+            })
+        except FileNotFoundError:
+            raise
+        except Exception as e:
+            log(f"    Warning: clip failed - {e}")
             errors.append(f"{clip.slug}: {e}")
             failed += 1
             if fail_fast:
                 break
+            continue
+
+    webhook_url = getattr(settings, "n8n_webhook_url", None)
+    if webhook_url:
+        log("Triggering n8n webhook...")
+        try:
+            import httpx
+            payload = {
+                "video_name": name,
+                "youtube_url": youtube_url or "",
+                "local_path": local_path or "",
+                "status": "success" if failed == 0 and success > 0 else "partial_or_failure",
+                "clips_total": total,
+                "clips_success": success,
+                "clips_failed": failed,
+                "clips": exported_clips,
+                "errors": errors,
+            }
+            resp = httpx.post(webhook_url, json=payload, timeout=15)
+            log(f"  n8n webhook status: {resp.status_code}")
+        except Exception as we:
+            log(f"  Warning: failed to trigger n8n webhook - {we}")
 
     return {"total": total, "success": success, "failed": failed, "errors": errors}
