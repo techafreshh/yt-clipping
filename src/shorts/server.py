@@ -29,6 +29,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/videos/{name}")
     def serve_video(name: str, request: Request):
+        name = name.removesuffix(".mp4")
         path = RAW_DIR / f"{name}.mp4"
         if not path.exists():
             raise HTTPException(404, f"Video not found: {path}")
@@ -56,6 +57,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/clips/{name}")
     def get_clips(name: str):
+        name = name.removesuffix(".mp4")
         clips = load_clips(name)
         if clips is None:
             return []
@@ -63,6 +65,7 @@ def create_app() -> FastAPI:
 
     @app.post("/api/clips/{name}", status_code=201)
     def create_clip(name: str, clip: Clip):
+        name = name.removesuffix(".mp4")
         clips = load_clips(name) or []
         clips.append(clip)
         save_clips(name, clips)
@@ -70,6 +73,7 @@ def create_app() -> FastAPI:
 
     @app.put("/api/clips/{name}/{index}")
     def update_clip(name: str, index: int, clip: Clip):
+        name = name.removesuffix(".mp4")
         clips = load_clips(name) or []
         if index < 0 or index >= len(clips):
             raise HTTPException(404, "Clip index out of range")
@@ -79,6 +83,7 @@ def create_app() -> FastAPI:
 
     @app.delete("/api/clips/{name}/{index}")
     def delete_clip(name: str, index: int):
+        name = name.removesuffix(".mp4")
         clips = load_clips(name) or []
         if index < 0 or index >= len(clips):
             raise HTTPException(404, "Clip index out of range")
@@ -88,7 +93,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/download-clip/{name}/{slug}")
     def download_clip(name: str, slug: str):
-        """Serve an individual clip MP4 from output/."""
+        name = name.removesuffix(".mp4")
         out_dir = Path("output") / name
         if not out_dir.exists():
             raise HTTPException(404, "No output directory found")
@@ -106,7 +111,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/download-all/{name}")
     def download_all(name: str):
-        """Stream a zip of all clips for a project."""
+        name = name.removesuffix(".mp4")
         out_dir = Path("output") / name
         if not out_dir.exists():
             raise HTTPException(404, "No output directory found")
@@ -133,6 +138,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/cut/{name}")
     def cut_all(name: str, captions: bool = False, crop: str = None):
+        name = name.removesuffix(".mp4")
         from shorts.captions import generate_ass
         from shorts.config import settings
         from shorts.cutter import cut_clip
@@ -259,6 +265,35 @@ def create_app() -> FastAPI:
 
         return {"status": "ok", "name": name, "path": f"raw/{name}.mp4"}
 
+    @app.post("/api/cookies")
+    async def upload_cookies(request: Request):
+        from fastapi import UploadFile, File as FastAPIFile
+        from shorts.downloader import COOKIES_PATH
+
+        form = await request.form()
+        file: UploadFile = form.get("file")
+
+        if not file:
+            raise HTTPException(400, "file required")
+
+        content = await file.read()
+        COOKIES_PATH.write_bytes(content)
+
+        return {"status": "ok", "message": "Cookies saved", "path": str(COOKIES_PATH)}
+
+    @app.get("/api/cookies")
+    async def get_cookies_status():
+        from shorts.downloader import COOKIES_PATH
+        exists = COOKIES_PATH.exists()
+        return {"exists": exists, "path": str(COOKIES_PATH)}
+
+    @app.delete("/api/cookies")
+    async def delete_cookies():
+        from shorts.downloader import COOKIES_PATH
+        if COOKIES_PATH.exists():
+            COOKIES_PATH.unlink()
+        return {"status": "ok", "message": "Cookies deleted"}
+
     @app.post("/api/auto/transcript")
     async def auto_transcript(request: Request):
         data = await request.json()
@@ -337,6 +372,9 @@ def create_app() -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     return app
+
+
+app = create_app()
 
 
 def _parse_range(range_header: str, file_size: int) -> tuple[int, int]:

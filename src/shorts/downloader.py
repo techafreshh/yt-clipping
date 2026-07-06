@@ -1,13 +1,67 @@
-"""Video downloading via yt-dlp."""
+"""Video downloading via yt-dlp with savenow.to API fallback."""
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
+import time
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
+import httpx
+
 RAW_DIR = Path("raw")
+COOKIES_PATH = Path("cookies.txt")
+SAVENOW_API = "https://p.savenow.to"
+
+
+def _download_via_savenow(url: str, output_path: Path) -> Path:
+    """Download a YouTube video via savenow.to API at1080p."""
+    tmp_path = output_path.with_suffix('.tmp.mp4')
+    with httpx.Client(timeout=300) as client:
+        resp = client.get(f"{SAVENOW_API}/api/v2/download", params={
+            "url": url,
+            "format": "1080",
+            "button": 1,
+        })
+        resp.raise_for_status()
+        data = resp.json()
+
+        if not data.get("success") or not data.get("id"):
+            raise RuntimeError(f"savenow API error: {data}")
+
+        job_id = data["id"]
+        progress_url = data.get("progress_url") or f"{SAVENOW_API}/api/progress?id={job_id}"
+
+        for _ in range(120):
+            time.sleep(2)
+            prog = client.get(progress_url)
+            prog.raise_for_status()
+            pdata = prog.json()
+
+            if pdata.get("success") == 1 and pdata.get("download_url"):
+                dl_url = pdata["download_url"]
+                with client.stream("GET", dl_url, follow_redirects=True) as r:
+                    r.raise_for_status()
+                    with open(tmp_path, "wb") as f:
+                        for chunk in r.iter_bytes(65536):
+                            f.write(chunk)
+
+                result = subprocess.run([
+                    "ffmpeg", "-y", "-i", str(tmp_path),
+                    "-c", "copy", "-movflags", "+faststart",
+                    str(output_path),
+                ], capture_output=True, text=True, check=True)
+                tmp_path.unlink(missing_ok=True)
+                return output_path
+
+            if pdata.get("success") == 0 and pdata.get("text") == "Error":
+                tmp_path.unlink(missing_ok=True)
+                raise RuntimeError("savenow conversion failed")
+
+        tmp_path.unlink(missing_ok=True)
+        raise RuntimeError("savenow download timed out")
 
 
 def _probe_dimensions(path: Path) -> tuple[int, int]:
@@ -30,18 +84,32 @@ def _probe_dimensions(path: Path) -> tuple[int, int]:
 
 
 def download_youtube(url: str, name: str) -> Path:
-    """Download a YouTube video via yt-dlp. Returns path to downloaded video."""
+    """Download a YouTube video. Tries savenow API first, falls back to yt-dlp."""
     out_dir = RAW_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     output_path = out_dir / f"{name}.mp4"
+
+    try:
+        return _download_via_savenow(url, output_path)
+    except Exception:
+        pass
 
     cmd = [
         "yt-dlp",
         "-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]",
         "--merge-output-format", "mp4",
+        "--postprocessor-args", "ffmpeg:-movflags +faststart",
         "-o", str(output_path),
-        url,
+        "--extractor-args", "youtube:player_client=web;fetch_pot=auto",
+        "--extractor-args", "youtubepot-bgutilhttp:base_url=http://pot-provider:4416",
+        "--remote-components", "ejs:github",
     ]
+    proxy = os.environ.get("YOUTUBE_PROXY")
+    if proxy:
+        cmd.extend(["--proxy", proxy])
+    if COOKIES_PATH.exists():
+        cmd.extend(["--cookies", str(COOKIES_PATH)])
+    cmd.append(url)
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -126,12 +194,36 @@ def derive_name_from_path(path: str) -> str:
 
 
 def get_youtube_title(url: str) -> str | None:
-    """Fetch video title from YouTube via yt-dlp (for naming)."""
+    """Fetch video title from YouTube. Tries savenow API first."""
+    try:
+        with httpx.Client(timeout=15) as client:
+            resp = client.get(f"{SAVENOW_API}/api/v2/download", params={
+                "url": url,
+                "format": "720",
+                "button": 1,
+            })
+            if resp.status_code == 200:
+                data = resp.json()
+                title = data.get("info", {}).get("title")
+                if title:
+                    safe = re.sub(r"[^a-z0-9-]+", "-", title.lower()).strip("-")
+                    return safe[:50] if safe else None
+    except Exception:
+        pass
+
     cmd = [
         "yt-dlp",
         "--get-title",
-        url,
+        "--extractor-args", "youtube:player_client=web;fetch_pot=auto",
+        "--extractor-args", "youtubepot-bgutilhttp:base_url=http://pot-provider:4416",
+        "--remote-components", "ejs:github",
     ]
+    proxy = os.environ.get("YOUTUBE_PROXY")
+    if proxy:
+        cmd.extend(["--proxy", proxy])
+    if COOKIES_PATH.exists():
+        cmd.extend(["--cookies", str(COOKIES_PATH)])
+    cmd.append(url)
     try:
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode == 0 and result.stdout.strip():

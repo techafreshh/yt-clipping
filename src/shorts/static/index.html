@@ -178,6 +178,16 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
         <span id="download-filename" style="font-size: 0.8rem; color: #9ca3af; margin-top: 4px;"></span>
       </div>
       <div id="download-status"></div>
+      <div class="section download-section" id="cookies-section">
+        <div class="section-label">YouTube Cookies</div>
+        <label style="font-size: 0.75rem; color: #9ca3af; display: block; margin-bottom: 6px;">Upload cookies.txt for restricted videos</label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input type="file" id="cookies-file" accept=".txt" style="display:none" aria-label="Cookies file">
+          <button id="cookies-upload-btn" style="flex: 1;">Upload Cookies</button>
+          <button id="cookies-delete-btn" class="btn-danger btn-sm" style="display:none;">Remove</button>
+        </div>
+        <div id="cookies-status" style="font-size: 0.75rem; margin-top: 4px;"></div>
+      </div>
     </div>
 
     <!-- Auto Tab -->
@@ -728,6 +738,58 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
     updateCropInfo();
     persistCrop();
   });
+
+  // --- Cookies ---
+  const cookiesFile = $('#cookies-file');
+  const cookiesUploadBtn = $('#cookies-upload-btn');
+  const cookiesDeleteBtn = $('#cookies-delete-btn');
+  const cookiesStatus = $('#cookies-status');
+
+  async function checkCookies() {
+    const res = await fetch('/api/cookies');
+    const data = await res.json();
+    if (data.exists) {
+      cookiesStatus.textContent = 'Cookies active';
+      cookiesStatus.style.color = '#4ade80';
+      cookiesDeleteBtn.style.display = 'inline-block';
+    } else {
+      cookiesStatus.textContent = 'No cookies — restricted videos may fail';
+      cookiesStatus.style.color = '#9ca3af';
+      cookiesDeleteBtn.style.display = 'none';
+    }
+  }
+
+  cookiesUploadBtn.addEventListener('click', () => cookiesFile.click());
+
+  cookiesFile.addEventListener('change', async () => {
+    const file = cookiesFile.files[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file);
+    cookiesStatus.textContent = 'Uploading...';
+    cookiesStatus.style.color = '#9ca3af';
+    try {
+      const res = await fetch('/api/cookies', { method: 'POST', body: form });
+      if (res.ok) {
+        checkCookies();
+      } else {
+        const err = await res.json();
+        cookiesStatus.textContent = err.detail || 'Upload failed';
+        cookiesStatus.style.color = '#f87171';
+      }
+    } catch (e) {
+      cookiesStatus.textContent = 'Upload failed';
+      cookiesStatus.style.color = '#f87171';
+    }
+    cookiesFile.value = '';
+  });
+
+  cookiesDeleteBtn.addEventListener('click', async () => {
+    await fetch('/api/cookies', { method: 'DELETE' });
+    checkCookies();
+  });
+
+  checkCookies();
 
   setupCropCanvas();
 

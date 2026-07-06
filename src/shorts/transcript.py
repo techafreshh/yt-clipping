@@ -75,9 +75,19 @@ def fetch_transcript_ytdlp(youtube_url: str, name: str) -> Transcript:
                 "--sub-lang", "en",
                 "--skip-download",
                 "--sub-format", "json3",
+                "--extractor-args", "youtube:player_client=web;fetch_pot=auto",
+                "--extractor-args", "youtubepot-bgutilhttp:base_url=http://pot-provider:4416",
+                "--remote-components", "ejs:github",
                 "-o", out_template,
-                youtube_url,
             ]
+            import os
+            proxy = os.environ.get("YOUTUBE_PROXY")
+            if proxy:
+                cmd.extend(["--proxy", proxy])
+            from shorts.downloader import COOKIES_PATH
+            if COOKIES_PATH.exists():
+                cmd.extend(["--cookies", str(COOKIES_PATH)])
+            cmd.append(youtube_url)
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
                 raise RuntimeError(f"yt-dlp subtitle download failed: {result.stderr}")
