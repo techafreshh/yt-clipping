@@ -235,8 +235,8 @@ def remove_silence(video_path: Path, output_path: Path, silent_segments: list[tu
 def crop_to_vertical(input_path: Path, output_path: Path, crop: dict | None = None, subtitle_path: Path | None = None) -> None:
     """Crop/scale video to 9:16 vertical format (1080x1920).
 
-    Fills the entire frame — no black bars. Uses increase+crop to avoid padding.
-    If crop dict provided, uses that region. Otherwise center-crops.
+    If crop dict is provided, crops/zooms to that region (filling the frame).
+    Otherwise, scales the video to fit the container with black letterbox bars.
     Uses GPU encoding (h264_nvenc) when available, falls back to CPU (libx264).
     """
     src_w, src_h = _probe_dimensions(input_path)
@@ -253,8 +253,8 @@ def crop_to_vertical(input_path: Path, output_path: Path, crop: dict | None = No
         )
     else:
         filter_complex = (
-            f"scale={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:force_original_aspect_ratio=increase,"
-            f"crop={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}"
+            f"scale={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:force_original_aspect_ratio=decrease,"
+            f"pad={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:(ow-iw)/2:(oh-ih)/2"
         )
 
     if subtitle_path:
