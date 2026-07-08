@@ -89,6 +89,29 @@ def _group_words(words: list[CaptionWord], max_group: int = 4, pause_threshold: 
     return groups
 
 
+def _wrap_title(text: str, max_chars: int = 24) -> list[str]:
+    """Wrap title text into lines of at most max_chars length."""
+    words = text.split()
+    if not words:
+        return []
+    lines = []
+    current_line = []
+    current_length = 0
+    for word in words:
+        # +1 for the space if current_line is not empty
+        added_len = len(word) + (1 if current_line else 0)
+        if current_line and current_length + added_len > max_chars:
+            lines.append(" ".join(current_line))
+            current_line = [word]
+            current_length = len(word)
+        else:
+            current_line.append(word)
+            current_length += added_len
+    if current_line:
+        lines.append(" ".join(current_line))
+    return lines
+
+
 def generate_ass(
     name: str, slug: str, transcript: Transcript | None, clip_start: float, clip_end: float,
     alignment: int | None = None, margin_v: int | None = None,
@@ -140,7 +163,7 @@ def generate_ass(
 
         # Style: Title, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
         lines.append(
-            f"Style: Title,Arial,48,&H00FFFFFF,&H00000000,&H00000000,{back_color},-1,0,0,0,100,100,0,0,3,15,0,8,60,60,80,1"
+            f"Style: Title,Arial,48,&H00FFFFFF,&H00000000,{back_color},{back_color},-1,0,0,0,100,100,0,0,3,15,0,8,60,60,80,1"
         )
 
     lines.extend([
@@ -151,7 +174,9 @@ def generate_ass(
 
     if title:
         safe_title = title.replace("{", "").replace("}", "").replace("\\", "/")
-        lines.append(f"Dialogue: 0,0:00:00.00,9:59:59.99,Title,,0,0,0,,{safe_title}")
+        title_lines = _wrap_title(safe_title, max_chars=24)
+        for t_line in title_lines:
+            lines.append(f"Dialogue: 0,0:00:00.00,9:59:59.99,Title,,0,0,0,,{t_line}")
 
     if transcript:
         words = _extract_words(transcript, clip_start, clip_end)

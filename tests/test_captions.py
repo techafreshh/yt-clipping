@@ -179,7 +179,7 @@ def test_generate_ass_with_title(tmp_path, monkeypatch):
     result = generate_ass("ep1", "title-clip", None, 0.0, 5.0, title="My Awesome Title", title_color="purple")
     assert result.exists()
     content = result.read_text()
-    assert "Style: Title,Arial,48,&H00FFFFFF,&H00000000,&H00000000,&H00CE5B4A" in content
+    assert "Style: Title,Arial,48,&H00FFFFFF,&H00000000,&H00CE5B4A,&H00CE5B4A" in content
     assert "Dialogue: 0,0:00:00.00,9:59:59.99,Title,,0,0,0,,My Awesome Title" in content
 
 
@@ -187,4 +187,16 @@ def test_generate_ass_with_custom_title_color(tmp_path, monkeypatch):
     monkeypatch.setattr("shorts.captions.WORKING_DIR", tmp_path)
     result = generate_ass("ep1", "title-clip-red", None, 0.0, 5.0, title="My Awesome Title", title_color="red")
     content = result.read_text()
-    assert "Style: Title,Arial,48,&H00FFFFFF,&H00000000,&H00000000,&H00481DE1" in content
+    assert "Style: Title,Arial,48,&H00FFFFFF,&H00000000,&H00481DE1,&H00481DE1" in content
+
+
+def test_generate_ass_title_wrapping(tmp_path, monkeypatch):
+    monkeypatch.setattr("shorts.captions.WORKING_DIR", tmp_path)
+    title = "POV: The highest paid engineer at your company gets fired"
+    result = generate_ass("ep1", "title-wrap", None, 0.0, 5.0, title=title, title_color="purple")
+    content = result.read_text()
+    # Check that it splits into multiple Dialogue events
+    assert "Dialogue: 0,0:00:00.00,9:59:59.99,Title,,0,0,0,,POV: The highest paid" in content
+    assert "Dialogue: 0,0:00:00.00,9:59:59.99,Title,,0,0,0,,engineer at your company" in content
+    assert "Dialogue: 0,0:00:00.00,9:59:59.99,Title,,0,0,0,,gets fired" in content
+
