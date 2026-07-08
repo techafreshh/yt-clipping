@@ -14,6 +14,7 @@ def download(
     youtube_url: Optional[str] = typer.Option(None, "--youtube-url", help="YouTube video URL to download"),
     local_path: Optional[str] = typer.Option(None, "--local-path", help="Local video file path to use"),
     audio: bool = typer.Option(False, "--audio", help="Also extract audio as WAV"),
+    resolution: int = typer.Option(1080, "--resolution", help="Preferred video resolution (e.g. 1080, 720)"),
 ):
     """Download a YouTube video or copy a local video to raw/."""
     from shorts.downloader import (
@@ -36,7 +37,7 @@ def download(
 
     try:
         if youtube_url:
-            path = download_youtube(youtube_url, name)
+            path = download_youtube(youtube_url, name, resolution=resolution)
             typer.echo(f"Downloaded to {path}")
         else:
             path = load_local_video(Path(local_path), name)
@@ -257,6 +258,7 @@ def run(
     remove_silence: bool = typer.Option(False, "--remove-silence", help="Remove silent gaps for tighter pacing"),
     audio: bool = typer.Option(False, "--audio", help="Extract audio for podcast clips"),
     whisper_model: str = typer.Option("base", "--whisper-model", help="Whisper model for local transcription (tiny/base/small/medium/large)"),
+    resolution: int = typer.Option(1080, "--resolution", help="Preferred video resolution (e.g. 1080, 720)"),
 ):
     """Run the full pipeline end-to-end."""
     from shorts.config import settings
@@ -298,6 +300,7 @@ def run(
             remove_silence=remove_silence,
             extract_audio_flag=audio,
             whisper_model=whisper_model,
+            resolution=resolution,
             log=typer.echo,
         )
     except (RuntimeError, FileNotFoundError) as e:

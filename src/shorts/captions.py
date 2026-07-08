@@ -35,8 +35,11 @@ def _extract_words(transcript: Transcript, clip_start: float, clip_end: float) -
     if transcript.words:
         for w in transcript.words:
             if w.end > clip_start and w.start < clip_end:
+                cleaned = w.text.strip().replace(">>", "").strip()
+                if not cleaned:
+                    continue
                 words.append(CaptionWord(
-                    text=w.text.strip(),
+                    text=cleaned,
                     start=max(0.0, w.start - clip_start),
                     end=max(0.0, w.end - clip_start),
                 ))
@@ -48,7 +51,7 @@ def _extract_words(transcript: Transcript, clip_start: float, clip_end: float) -
             next_start = transcript.segments[i + 1].start if i + 1 < len(transcript.segments) else float("inf")
             seg_end_cap = min(seg.end, next_start)
 
-            seg_words = seg.text.split()
+            seg_words = seg.text.replace(">>", "").split()
             if not seg_words:
                 continue
             seg_start = max(0.0, seg.start - clip_start)
@@ -56,9 +59,12 @@ def _extract_words(transcript: Transcript, clip_start: float, clip_end: float) -
             seg_duration = max(seg_end - seg_start, 0.1)
             word_duration = seg_duration / len(seg_words)
             for j, word_text in enumerate(seg_words):
+                cleaned = word_text.strip()
+                if not cleaned:
+                    continue
                 w_start = seg_start + j * word_duration
                 w_end = seg_start + (j + 1) * word_duration
-                words.append(CaptionWord(text=word_text.strip(), start=w_start, end=w_end))
+                words.append(CaptionWord(text=cleaned, start=w_start, end=w_end))
 
     words.sort(key=lambda w: w.start)
     return words

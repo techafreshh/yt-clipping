@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import tempfile
 import time
@@ -28,13 +29,20 @@ class Transcript(BaseModel):
     words: Optional[list[TranscriptSegment]] = None
 
 
+def _clean_text(text: str) -> str:
+    """Strip >> speaker markers and clean whitespace."""
+    text = text.replace(">>", "").strip()
+    text = re.sub(r'\s+', ' ', text)
+    return text
+
+
 def _parse_segment(raw: dict) -> TranscriptSegment:
     """Parse a segment from either start/end or offset/duration format."""
     if "start" in raw and "end" in raw:
-        return TranscriptSegment(start=raw["start"], end=raw["end"], text=raw["text"])
+        return TranscriptSegment(start=raw["start"], end=raw["end"], text=_clean_text(raw["text"]))
     offset = raw.get("offset", 0)
     duration = raw.get("duration", 0)
-    return TranscriptSegment(start=offset / 1000.0, end=(offset + duration) / 1000.0, text=raw["text"])
+    return TranscriptSegment(start=offset / 1000.0, end=(offset + duration) / 1000.0, text=_clean_text(raw["text"]))
 
 
 def fetch_transcript(youtube_url: str, api_key: str) -> Transcript:
@@ -111,7 +119,7 @@ def fetch_transcript_ytdlp(youtube_url: str, name: str) -> Transcript:
                     segments.append(TranscriptSegment(
                         start=start_ms / 1000.0,
                         end=(start_ms + dur_ms) / 1000.0,
-                        text=text,
+                        text=_clean_text(text),
                     ))
 
             if not segments:
@@ -194,7 +202,7 @@ def transcribe_local_audio(audio_path: Path, model_name: str = "base") -> Transc
                 words.append(TranscriptSegment(
                     start=w["start"],
                     end=w["end"],
-                    text=w["word"].strip(),
+                    text=_clean_text(w["word"].strip()),
                 ))
 
         return Transcript(

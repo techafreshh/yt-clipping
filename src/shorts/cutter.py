@@ -22,6 +22,23 @@ logger = logging.getLogger(__name__)
 
 # GPU acceleration support
 _nvenc_available: bool | None = None
+_drawtext_available: bool | None = None
+
+
+def _detect_drawtext() -> bool:
+    """Detect if ffmpeg has drawtext filter support."""
+    global _drawtext_available
+    if _drawtext_available is not None:
+        return _drawtext_available
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-filters"],
+            capture_output=True, text=True, timeout=10,
+        )
+        _drawtext_available = "drawtext" in result.stdout
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        _drawtext_available = False
+    return _drawtext_available
 
 
 def _detect_nvenc() -> bool:
@@ -101,19 +118,22 @@ def _probe_dimensions(path: Path) -> tuple[int, int]:
 
 def _cut_track(input_path: Path, output_path: Path, start: float, end: float) -> None:
     """Cut a single track with stream-copy, falling back to re-encode if duration drifts."""
-    cmd = ["ffmpeg", "-y", "-ss", str(start), "-to", str(end), "-i", str(input_path), "-c", "copy", str(output_path)]
+    duration = end - start
+    cmd = ["ffmpeg", "-y", "-ss", str(start), "-i", str(input_path),
+           "-t", str(duration), "-c", "copy",
+           "-avoid_negative_ts", "make_zero", str(output_path)]
     try:
         subprocess.run(cmd, capture_output=True, text=True, check=True)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"ffmpeg failed: {e.stderr}")
 
     actual = _get_duration(output_path)
-    expected = end - start
-    if abs(actual - expected) > 0.5:
+    if abs(actual - duration) > 0.5:
         decode_args = _gpu_decode_args()
         encode_args = _gpu_encode_args()
-        cmd = ["ffmpeg", "-y"] + decode_args + ["-ss", str(start), "-to", str(end), "-i", str(input_path),
-               *encode_args, "-c:a", "aac", str(output_path)]
+        cmd = ["ffmpeg", "-y"] + decode_args + ["-ss", str(start), "-i", str(input_path),
+               "-t", str(duration), *encode_args, "-c:a", "aac",
+               "-avoid_negative_ts", "make_zero", str(output_path)]
         try:
             subprocess.run(cmd, capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as e:
@@ -232,11 +252,13 @@ def remove_silence(video_path: Path, output_path: Path, silent_segments: list[tu
     return segments
 
 
-def crop_to_vertical(input_path: Path, output_path: Path, crop: dict | None = None, subtitle_path: Path | None = None) -> None:
+def crop_to_vertical(input_path: Path, output_path: Path, crop: dict | None = None, subtitle_path: Path | None = None, title: str | None = None) -> None:
     """Crop/scale video to 9:16 vertical format (1080x1920).
 
     If crop dict is provided, crops/zooms to that region (filling the frame).
     Otherwise, scales the video to fit the container with black letterbox bars.
+    If title is provided and no crop is set, overlays the title text in the
+    top letterbox bar area.
     Uses GPU encoding (h264_nvenc) when available, falls back to CPU (libx264).
     """
     src_w, src_h = _probe_dimensions(input_path)
@@ -256,6 +278,15 @@ def crop_to_vertical(input_path: Path, output_path: Path, crop: dict | None = No
             f"scale={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:force_original_aspect_ratio=decrease,"
             f"pad={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:(ow-iw)/2:(oh-ih)/2"
         )
+        # Add title overlay in the top letterbox bar when no crop is applied
+        if title and _detect_drawtext():
+            safe_title = title.replace("'", "\u2019").replace("\\", "\\\\").replace(":", "\\\\:").replace("%", "%%")
+            filter_complex += (
+                f",drawtext=text='{safe_title}'"
+                f":fontsize=42:fontcolor=white"
+                f":shadowcolor=black@0.6:shadowx=2:shadowy=2"
+                f":x=(w-text_w)/2:y=60"
+            )
 
     if subtitle_path:
         escaped = str(subtitle_path).replace("\\", "/").replace(":", "\\:")
@@ -317,7 +348,8 @@ def cut_clip(
                 current = nosilence
 
     vertical_out = out_dir / f"{clip.slug}_vertical.mp4"
-    crop_to_vertical(current, vertical_out, crop=crop, subtitle_path=subtitle_path)
+    clip_title = getattr(clip, "hook", None) or getattr(clip, "slug", None)
+    crop_to_vertical(current, vertical_out, crop=crop, subtitle_path=subtitle_path, title=clip_title)
 
     return CutResult(
         video_path=vertical_out,

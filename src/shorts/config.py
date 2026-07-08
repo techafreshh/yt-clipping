@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     youtube_proxy: Optional[str] = None
     caption_alignment: int = 2
     caption_margin_v: int = 480
+    default_resolution: int = 1080
     n8n_webhook_url: Optional[str] = None
 
 

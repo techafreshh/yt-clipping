@@ -101,7 +101,7 @@ def _probe_dimensions(path: Path) -> tuple[int, int]:
     return int(stream["width"]), int(stream["height"])
 
 
-def download_youtube(url: str, name: str) -> Path:
+def download_youtube(url: str, name: str, resolution: int = 1080) -> Path:
     """Download a YouTube video. Tries savenow API first, falls back to yt-dlp."""
     out_dir = RAW_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -113,9 +113,17 @@ def download_youtube(url: str, name: str) -> Path:
         pass
 
     print("Falling back to yt-dlp download...")
+    # Prefer exact resolution, then fall back to best available at or below
+    fmt = (
+        f"bestvideo[height={resolution}][ext=mp4]+bestaudio[ext=m4a]/"
+        f"bestvideo[height={resolution}]+bestaudio/"
+        f"bestvideo[height<={resolution}][ext=mp4]+bestaudio[ext=m4a]/"
+        f"bestvideo[height<={resolution}]+bestaudio/"
+        f"best[height<={resolution}]"
+    )
     cmd = [
         "yt-dlp",
-        "-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]",
+        "-f", fmt,
         "--merge-output-format", "mp4",
         "--postprocessor-args", "ffmpeg:-movflags +faststart",
         "-o", str(output_path),

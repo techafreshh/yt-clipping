@@ -28,6 +28,7 @@ def run_pipeline(
     extract_audio_flag: bool = False,
     crop: dict | None = None,
     whisper_model: str = "base",
+    resolution: int = 1080,
     log: Callable[[str], None] = print,
 ) -> dict:
     """Run full pipeline: download -> transcript -> suggest -> cut."""
@@ -39,7 +40,7 @@ def run_pipeline(
         step += 1
         log(f"[{step}/{steps}] Downloading video")
         if youtube_url:
-            download_youtube(youtube_url, name)
+            download_youtube(youtube_url, name, resolution=resolution)
             log(f"  Downloaded to raw/{name}.mp4")
         else:
             load_local_video(Path(local_path), name)
