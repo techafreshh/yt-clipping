@@ -347,3 +347,58 @@ def test_cli_cut_with_remove_silence(tmp_path, monkeypatch):
 
     result = runner.invoke(app, ["cut", "ep1", "--remove-silence"])
     assert result.exit_code == 0
+
+
+def test_crop_to_vertical_with_bg_music_looping(tmp_path, monkeypatch):
+    input_video = tmp_path / "in.mp4"
+    input_video.write_bytes(b"video")
+    bg_music = tmp_path / "music.mp3"
+    bg_music.write_bytes(b"music")
+    output_video = tmp_path / "out.mp4"
+
+    monkeypatch.setattr("shorts.cutter._probe_dimensions", lambda p: (1920, 1080))
+    monkeypatch.setattr("shorts.cutter._get_duration", lambda p: 30.0 if p == input_video else 10.0)
+    monkeypatch.setattr("shorts.cutter._has_audio", lambda p: True)
+
+    ffmpeg_cmd = []
+    def mock_run(cmd, **kwargs):
+        ffmpeg_cmd.extend(cmd)
+        output_video.write_bytes(b"done")
+        return MagicMock()
+
+    monkeypatch.setattr("shorts.cutter.subprocess.run", mock_run)
+
+    crop_to_vertical(input_video, output_video, bg_music=bg_music, bg_music_volume=0.15)
+
+    assert "-stream_loop" in ffmpeg_cmd
+    fc_idx = ffmpeg_cmd.index("-filter_complex")
+    filter_complex_val = ffmpeg_cmd[fc_idx + 1]
+    assert "volume=0.15" in filter_complex_val
+    assert "amix" in filter_complex_val
+    assert "duration=first" in filter_complex_val
+
+
+def test_crop_to_vertical_with_bg_music_offset(tmp_path, monkeypatch):
+    input_video = tmp_path / "in.mp4"
+    input_video.write_bytes(b"video")
+    bg_music = tmp_path / "music.mp3"
+    bg_music.write_bytes(b"music")
+    output_video = tmp_path / "out.mp4"
+
+    monkeypatch.setattr("shorts.cutter._probe_dimensions", lambda p: (1920, 1080))
+    monkeypatch.setattr("shorts.cutter._get_duration", lambda p: 10.0 if p == input_video else 60.0)
+    monkeypatch.setattr("shorts.cutter._has_audio", lambda p: True)
+
+    ffmpeg_cmd = []
+    def mock_run(cmd, **kwargs):
+        ffmpeg_cmd.extend(cmd)
+        output_video.write_bytes(b"done")
+        return MagicMock()
+
+    monkeypatch.setattr("shorts.cutter.subprocess.run", mock_run)
+
+    crop_to_vertical(input_video, output_video, bg_music=bg_music, bg_music_volume=0.1)
+
+    assert "-ss" in ffmpeg_cmd
+    assert "-stream_loop" not in ffmpeg_cmd
+

@@ -174,6 +174,8 @@ def cut(
     remove_silence: bool = typer.Option(False, "--remove-silence", help="Remove silent gaps for tighter pacing"),
     audio: bool = typer.Option(False, "--audio", help="Export audio alongside video clips"),
     title_color: Optional[str] = typer.Option("random", "--title-color", help="Title overlay background color (purple, red, orange, green, blue, yellow, dark, random)"),
+    bg_music: Optional[str] = typer.Option(None, "--bg-music", help="Background music URL or local file path"),
+    bg_music_volume: Optional[float] = typer.Option(None, "--bg-music-volume", help="Background music volume level"),
 ):
     """Cut and export vertical shorts from clip specs."""
     from shorts.cutter import cut_clip
@@ -199,6 +201,21 @@ def cut(
         typer.echo("Warning: --remove-silence and --captions together may cause sync issues. Using captions without silence removal.", err=True)
         remove_silence = False
 
+    resolved_bg_music = None
+    if bg_music:
+        if bg_music.startswith(("http://", "https://")):
+            typer.echo("Resolving background music from URL...")
+            from shorts.downloader import download_audio
+            try:
+                resolved_bg_music = download_audio(bg_music)
+            except Exception as e:
+                typer.echo(f"Warning: failed to download background music URL - {e}", err=True)
+        else:
+            resolved_bg_music = Path(bg_music)
+            if not resolved_bg_music.exists():
+                typer.echo(f"Warning: background music path {bg_music} does not exist.", err=True)
+                resolved_bg_music = None
+
     success = 0
     errors: list[str] = []
     for i, clip in enumerate(clips, 1):
@@ -218,7 +235,12 @@ def cut(
             )
 
         try:
-            result = cut_clip(name, clip, remove_silence_flag=remove_silence, crop=clip_crop, subtitle_path=subtitle_path)
+            from shorts.config import settings
+            volume = bg_music_volume if bg_music_volume is not None else getattr(settings, "default_bg_music_volume", 0.1)
+            result = cut_clip(
+                name, clip, remove_silence_flag=remove_silence, crop=clip_crop,
+                subtitle_path=subtitle_path, bg_music=resolved_bg_music, bg_music_volume=volume
+            )
         except FileNotFoundError as e:
             typer.echo(f"Error: {e}", err=True)
             raise typer.Exit(1)
@@ -276,6 +298,8 @@ def run(
     resolution: int = typer.Option(1080, "--resolution", help="Preferred video resolution (e.g. 1080, 720)"),
     context: Optional[str] = typer.Option(None, "--context", "-c", help="Optional video context / editing directions for LLM suggestion"),
     title_color: Optional[str] = typer.Option("random", "--title-color", help="Title overlay background color (purple, red, orange, green, blue, yellow, dark, random)"),
+    bg_music: Optional[str] = typer.Option(None, "--bg-music", help="Background music URL or local file path"),
+    bg_music_volume: Optional[float] = typer.Option(None, "--bg-music-volume", help="Background music volume level"),
 ):
     """Run the full pipeline end-to-end."""
     from shorts.config import settings
@@ -320,6 +344,8 @@ def run(
             resolution=resolution,
             suggest_context=context,
             title_color=title_color,
+            bg_music=bg_music,
+            bg_music_volume=bg_music_volume,
             log=typer.echo,
         )
     except (RuntimeError, FileNotFoundError) as e:

@@ -252,8 +252,25 @@ def remove_silence(video_path: Path, output_path: Path, silent_segments: list[tu
     return segments
 
 
-def crop_to_vertical(input_path: Path, output_path: Path, crop: dict | None = None, subtitle_path: Path | None = None, title: str | None = None) -> None:
-    """Crop/scale video to 9:16 vertical format (1080x1920).
+def _has_audio(path: Path) -> bool:
+    """Check if the media file has an audio stream."""
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-select_streams", "a",
+        "-show_entries", "stream=codec_type",
+        "-of", "csv=p=0",
+        str(path)
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return "audio" in result.stdout
+
+
+def crop_to_vertical(
+    input_path: Path, output_path: Path, crop: dict | None = None,
+    subtitle_path: Path | None = None, title: str | None = None,
+    bg_music: Path | None = None, bg_music_volume: float = 0.1,
+) -> None:
+    """Crop/scale video to 9:16 vertical format (1080x1920) and overlay background music.
 
     If crop dict is provided, crops/zooms to that region (filling the frame).
     Otherwise, scales the video to fit the container with black letterbox bars.
@@ -293,16 +310,52 @@ def crop_to_vertical(input_path: Path, output_path: Path, crop: dict | None = No
 
     decode_args = _gpu_decode_args()
     encode_args = _gpu_encode_args()
+
     cmd = [
         "ffmpeg", "-y",
         *decode_args,
         "-i", str(input_path),
-        "-vf", filter_complex,
-        "-map", "0:v", "-map", "0:a?",
-        *encode_args,
-        "-c:a", "aac", "-pix_fmt", "yuv420p",
-        str(output_path),
     ]
+
+    audio_filter = None
+    if bg_music and bg_music.exists():
+        clip_dur = _get_duration(input_path)
+        music_dur = _get_duration(bg_music)
+
+        if music_dur < clip_dur:
+            # Loop the music indefinitely
+            cmd.extend(["-stream_loop", "-1", "-i", str(bg_music)])
+        else:
+            # Pick a random starting offset (leaving a 2s buffer at the end)
+            import random
+            max_start = max(0.0, music_dur - clip_dur - 2.0)
+            start_offset = random.uniform(0.0, max_start)
+            cmd.extend(["-ss", f"{start_offset:.3f}", "-i", str(bg_music)])
+
+        fade_out_start = max(0.0, clip_dur - 1.5)
+        if _has_audio(input_path):
+            audio_filter = (
+                f"[1:a]volume={bg_music_volume:.2f},"
+                f"afade=t=in:ss=0:d=0.5,"
+                f"afade=t=out:st={fade_out_start:.2f}:d=1.5[bg];"
+                f"[0:a][bg]amix=inputs=2:duration=first:dropout_transition=2[a]"
+            )
+        else:
+            audio_filter = (
+                f"[1:a]volume={bg_music_volume:.2f},"
+                f"afade=t=in:ss=0:d=0.5,"
+                f"afade=t=out:st={fade_out_start:.2f}:d=1.5[a]"
+            )
+
+    cmd.extend(["-vf", filter_complex])
+
+    if audio_filter:
+        cmd.extend(["-filter_complex", audio_filter, "-map", "0:v", "-map", "[a]"])
+    else:
+        cmd.extend(["-map", "0:v", "-map", "0:a?"])
+
+    cmd.extend(encode_args)
+    cmd.extend(["-c:a", "aac", "-pix_fmt", "yuv420p", str(output_path)])
 
     try:
         subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -313,6 +366,7 @@ def crop_to_vertical(input_path: Path, output_path: Path, crop: dict | None = No
 def cut_clip(
     name: str, clip, remove_silence_flag: bool = False,
     crop: dict | None = None, subtitle_path: Path | None = None,
+    bg_music: Path | None = None, bg_music_volume: float = 0.1,
 ) -> CutResult:
     """Cut a clip from the source video, optionally remove silence, and crop to 9:16."""
     from shorts.highlights import parse_timestamp
@@ -348,7 +402,10 @@ def cut_clip(
 
     vertical_out = out_dir / f"{clip.slug}_vertical.mp4"
     clip_title = getattr(clip, "hook", None) or getattr(clip, "slug", None)
-    crop_to_vertical(current, vertical_out, crop=crop, subtitle_path=subtitle_path, title=clip_title)
+    crop_to_vertical(
+        current, vertical_out, crop=crop, subtitle_path=subtitle_path,
+        title=clip_title, bg_music=bg_music, bg_music_volume=bg_music_volume
+    )
 
     return CutResult(
         video_path=vertical_out,

@@ -8,7 +8,7 @@ from typing import Callable, Optional
 from shorts.captions import generate_ass
 from shorts.config import require, settings
 from shorts.cutter import cut_clip
-from shorts.downloader import RAW_DIR, download_youtube, extract_audio, load_local_video
+from shorts.downloader import RAW_DIR, download_youtube, extract_audio, load_local_video, download_audio
 from shorts.highlights import load_clips, parse_timestamp, save_clips, suggest_highlights, validate_clips
 from shorts.transcript import (
     fetch_transcript_with_fallback, load_cached, save_transcript,
@@ -31,6 +31,8 @@ def run_pipeline(
     resolution: int = 1080,
     suggest_context: Optional[str] = None,
     title_color: Optional[str] = None,
+    bg_music: Optional[str] = None,
+    bg_music_volume: Optional[float] = None,
     log: Callable[[str], None] = print,
 ) -> dict:
     """Run full pipeline: download -> transcript -> suggest -> cut."""
@@ -92,6 +94,20 @@ def run_pipeline(
     step += 1
     log(f"[{step}/{steps}] Cutting clips")
 
+    resolved_bg_music = None
+    if bg_music:
+        if bg_music.startswith(("http://", "https://")):
+            log(f"  Resolving background music from URL...")
+            try:
+                resolved_bg_music = download_audio(bg_music)
+            except Exception as e:
+                log(f"  Warning: failed to download background music URL - {e}")
+        else:
+            resolved_bg_music = Path(bg_music)
+            if not resolved_bg_music.exists():
+                log(f"  Warning: background music path {bg_music} does not exist.")
+                resolved_bg_music = None
+
     if remove_silence and captions:
         log("  Warning: --remove-silence and --captions together may cause sync issues. Disabling silence removal.")
         remove_silence = False
@@ -127,7 +143,11 @@ def run_pipeline(
                 )
 
             log("    Rendering video (cutting, cropping, and burning captions in single pass)...")
-            result = cut_clip(name, clip, remove_silence_flag=remove_silence, crop=clip_crop, subtitle_path=subtitle_path)
+            volume = bg_music_volume if bg_music_volume is not None else getattr(settings, "default_bg_music_volume", 0.1)
+            result = cut_clip(
+                name, clip, remove_silence_flag=remove_silence, crop=clip_crop,
+                subtitle_path=subtitle_path, bg_music=resolved_bg_music, bg_music_volume=volume
+            )
 
             out_dir = Path("output") / name
             out_dir.mkdir(parents=True, exist_ok=True)

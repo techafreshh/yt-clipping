@@ -274,3 +274,54 @@ def get_youtube_title(url: str) -> str | None:
     except FileNotFoundError:
         pass
     return None
+
+
+def download_audio(url: str) -> Path:
+    """Download audio stream from a YouTube/TikTok URL and cache it in the music/ directory."""
+    import hashlib
+    music_dir = Path("music")
+    music_dir.mkdir(parents=True, exist_ok=True)
+
+    # Use MD5 hash of the URL to generate a unique filename
+    url_hash = hashlib.md5(url.encode("utf-8")).hexdigest()[:12]
+    output_path = music_dir / f"bg_{url_hash}.mp3"
+
+    if output_path.exists():
+        print(f"Using cached background music: {output_path}")
+        return output_path
+
+    print(f"Downloading background music from {url}...")
+    cmd = [
+        "yt-dlp",
+        "-f", "ba/b",
+        "-x",
+        "--audio-format", "mp3",
+        "-o", str(output_path),
+    ]
+    proxy = os.environ.get("YOUTUBE_PROXY")
+    if proxy:
+        cmd.extend(["--proxy", proxy])
+    if COOKIES_PATH.exists():
+        cmd.extend(["--cookies", str(COOKIES_PATH)])
+    cmd.append(url)
+
+    try:
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        if not output_path.exists():
+            # Check if it was written with double extension or without extension
+            fallback = output_path.with_name(output_path.name + ".mp3")
+            if fallback.exists():
+                fallback.rename(output_path)
+            else:
+                matches = list(music_dir.glob(f"bg_{url_hash}*"))
+                if matches:
+                    matches[0].rename(output_path)
+                else:
+                    raise RuntimeError(f"Downloaded file not found: {output_path}")
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to download background music: {e.stderr}")
+    except FileNotFoundError:
+        raise RuntimeError("yt-dlp not found. Install with: pip install yt-dlp")
+
+    return output_path
+

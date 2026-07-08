@@ -173,7 +173,9 @@ def generate_ass(
     ])
 
     if title:
-        safe_title = title.replace("{", "").replace("}", "").replace("\\", "/")
+        # Convert to all caps and remove em-dashes
+        processed_title = title.upper().replace("—", "")
+        safe_title = processed_title.replace("{", "").replace("}", "").replace("\\", "/")
         title_lines = _wrap_title(safe_title, max_chars=24)
         for t_line in title_lines:
             lines.append(f"Dialogue: 0,0:00:00.00,9:59:59.99,Title,,0,0,0,,{t_line}")

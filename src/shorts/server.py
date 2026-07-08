@@ -8,7 +8,7 @@ import zipfile
 from pathlib import Path
 from typing import Generator, Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -137,7 +137,15 @@ def create_app() -> FastAPI:
         )
 
     @app.get("/api/cut/{name}")
-    def cut_all(name: str, captions: bool = False, crop: str = None, title_color: Optional[str] = None):
+    @app.post("/api/cut/{name}")
+    def cut_all(
+        name: str,
+        captions: bool = False,
+        crop: str = None,
+        title_color: Optional[str] = None,
+        bg_music: Optional[str] = Query(None),
+        bg_music_volume: Optional[float] = Query(None)
+    ):
         name = name.removesuffix(".mp4")
         from shorts.captions import generate_ass
         from shorts.config import settings
@@ -153,8 +161,21 @@ def create_app() -> FastAPI:
         if crop:
             try:
                 global_crop = json.loads(crop)
-            except (json.JSONDecodeError, TypeError):
+            except Exception:
                 pass
+
+        resolved_bg_music = None
+        if bg_music:
+            if bg_music.startswith(("http://", "https://")):
+                from shorts.downloader import download_audio
+                try:
+                    resolved_bg_music = download_audio(bg_music)
+                except Exception as e:
+                    print(f"Warning: failed to download background music URL - {e}")
+            else:
+                resolved_bg_music = Path(bg_music)
+                if not resolved_bg_music.exists():
+                    resolved_bg_music = None
 
         transcript = None
         if captions:
@@ -183,7 +204,12 @@ def create_app() -> FastAPI:
                             title_color=title_color
                         )
 
-                    result = cut_clip(name, clip, crop=clip_crop, subtitle_path=subtitle_path)
+                    from shorts.config import settings
+                    volume = bg_music_volume if bg_music_volume is not None else getattr(settings, "default_bg_music_volume", 0.1)
+                    result = cut_clip(
+                        name, clip, crop=clip_crop, subtitle_path=subtitle_path,
+                        bg_music=resolved_bg_music, bg_music_volume=volume
+                    )
 
                     out_dir = Path("output") / name
                     out_dir.mkdir(parents=True, exist_ok=True)

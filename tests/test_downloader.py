@@ -126,3 +126,32 @@ def test_download_youtube_ytdlp_not_found(tmp_path, monkeypatch):
     from shorts.downloader import download_youtube
     with pytest.raises(RuntimeError, match="yt-dlp not found"):
         download_youtube("https://youtube.com/watch?v=abc", "test")
+
+
+def test_download_audio_success(tmp_path, monkeypatch):
+    # Mock Path("music") to resolve to a directory within tmp_path
+    from pathlib import Path as OriginalPath
+    class MockPath:
+        def __new__(cls, *args):
+            if len(args) == 1 and args[0] == "music":
+                return tmp_path / "music"
+            return OriginalPath(*args)
+    monkeypatch.setattr("shorts.downloader.Path", MockPath)
+
+    def mock_run(cmd, **kwargs):
+        import hashlib
+        url = cmd[-1]
+        url_hash = hashlib.md5(url.encode("utf-8")).hexdigest()[:12]
+        output_file = tmp_path / "music" / f"bg_{url_hash}.mp3"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_bytes(b"audio stream")
+        return MagicMock()
+
+    monkeypatch.setattr("shorts.downloader.subprocess.run", mock_run)
+
+    from shorts.downloader import download_audio
+    result = download_audio("https://tiktok.com/@user/video/123456")
+    assert result.name.startswith("bg_")
+    assert result.suffix == ".mp3"
+    assert result.read_bytes() == b"audio stream"
+

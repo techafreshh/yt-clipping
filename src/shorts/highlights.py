@@ -99,7 +99,7 @@ def suggest_highlights(
         f"2. Return at most {count} clips. Quality over quantity — it's better to return fewer great clips than many mediocre ones.\n"
         "3. Each clip MUST be between 30 and 300 seconds long.\n"
         "4. Use timestamps from the transcript. end minus start >= 30.\n"
-        "5. Each clip must have a strong opening hook that grabs attention in the first 3 seconds.\n"
+        "5. Each clip must have a strong, short, provocative, and edgy opening hook in ALL CAPS (at most 5 words, strictly no em-dashes '—') that will hook the viewers in the first 3 seconds. Example: 'EVERYONE WEARS MASKS' instead of 'Everyone wears masks - learn the law of role-playing'.\n"
         "6. CRITICAL — NEVER cut mid-sentence. Every clip must start at the beginning of a sentence or paragraph "
         "and end at a natural sentence/paragraph boundary. Look for periods, question marks, exclamation marks, "
         "or paragraph breaks in the transcript to identify safe cut points. "

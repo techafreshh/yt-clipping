@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     caption_margin_v: int = 480
     default_resolution: int = 1080
     n8n_webhook_url: Optional[str] = None
+    default_bg_music_volume: float = 0.1
 
 
 def require(settings: Settings, field_name: str) -> str:
