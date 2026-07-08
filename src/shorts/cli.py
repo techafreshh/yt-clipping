@@ -135,6 +135,7 @@ def suggest(
     name: str = typer.Argument(..., help="Source name identifier"),
     model: Optional[str] = typer.Option(None, "--model", help="OpenRouter model to use"),
     count: int = typer.Option(5, "--count", help="Number of clips to suggest"),
+    context: Optional[str] = typer.Option(None, "--context", "-c", help="Optional video context / editing directions for LLM suggestion"),
 ):
     """AI-suggest clip-worthy highlights from a transcript."""
     from shorts.config import require, settings
@@ -151,7 +152,11 @@ def suggest(
     max_duration = max(seg.end for seg in cached.segments)
 
     try:
-        clips = suggest_highlights("", api_key, use_model, count, segments=cached.segments, total_duration=max_duration)
+        clips = suggest_highlights(
+            "", api_key, use_model, count,
+            segments=cached.segments, total_duration=max_duration,
+            context=context
+        )
         clips = validate_clips(clips, max_duration)
     except (RuntimeError, ValueError) as e:
         typer.echo(f"Error: {e}", err=True)
@@ -168,6 +173,7 @@ def cut(
     captions: bool = typer.Option(False, "--captions", help="Burn TikTok-style captions"),
     remove_silence: bool = typer.Option(False, "--remove-silence", help="Remove silent gaps for tighter pacing"),
     audio: bool = typer.Option(False, "--audio", help="Export audio alongside video clips"),
+    title_color: Optional[str] = typer.Option("random", "--title-color", help="Title overlay background color (purple, red, orange, green, blue, yellow, dark, random)"),
 ):
     """Cut and export vertical shorts from clip specs."""
     from shorts.cutter import cut_clip
@@ -180,8 +186,8 @@ def cut(
         raise typer.Exit(1)
 
     transcript = None
+    from shorts.captions import generate_ass
     if captions:
-        from shorts.captions import generate_ass
         from shorts.transcript import load_cached
 
         transcript = load_cached(name)
@@ -197,12 +203,21 @@ def cut(
     errors: list[str] = []
     for i, clip in enumerate(clips, 1):
         typer.echo(f"Cutting clip {i}/{len(clips)}: {clip.slug}")
+        clip_title = getattr(clip, "hook", None)
+        clip_crop = clip.crop.model_dump() if clip.crop else None
+        show_title = clip_title and (clip_crop is None)
+
         subtitle_path = None
-        if captions:
-            subtitle_path = generate_ass(name, clip.slug, transcript, parse_timestamp(clip.start), parse_timestamp(clip.end))
+        if captions or show_title:
+            subtitle_path = generate_ass(
+                name, clip.slug,
+                transcript if captions else None,
+                parse_timestamp(clip.start), parse_timestamp(clip.end),
+                title=clip_title if show_title else None,
+                title_color=title_color
+            )
 
         try:
-            clip_crop = clip.crop.model_dump() if clip.crop else None
             result = cut_clip(name, clip, remove_silence_flag=remove_silence, crop=clip_crop, subtitle_path=subtitle_path)
         except FileNotFoundError as e:
             typer.echo(f"Error: {e}", err=True)
@@ -259,6 +274,8 @@ def run(
     audio: bool = typer.Option(False, "--audio", help="Extract audio for podcast clips"),
     whisper_model: str = typer.Option("base", "--whisper-model", help="Whisper model for local transcription (tiny/base/small/medium/large)"),
     resolution: int = typer.Option(1080, "--resolution", help="Preferred video resolution (e.g. 1080, 720)"),
+    context: Optional[str] = typer.Option(None, "--context", "-c", help="Optional video context / editing directions for LLM suggestion"),
+    title_color: Optional[str] = typer.Option("random", "--title-color", help="Title overlay background color (purple, red, orange, green, blue, yellow, dark, random)"),
 ):
     """Run the full pipeline end-to-end."""
     from shorts.config import settings
@@ -301,6 +318,8 @@ def run(
             extract_audio_flag=audio,
             whisper_model=whisper_model,
             resolution=resolution,
+            suggest_context=context,
+            title_color=title_color,
             log=typer.echo,
         )
     except (RuntimeError, FileNotFoundError) as e:

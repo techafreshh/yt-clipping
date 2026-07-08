@@ -133,6 +133,20 @@ def test_suggest_highlights_success(monkeypatch):
     assert clips[0].slug == "great-moment"
 
 
+def test_suggest_highlights_with_context(monkeypatch):
+    mock = _mock_client([_ok_response(VALID_CLIPS_JSON)])
+    monkeypatch.setattr("shorts.highlights.httpx.Client", lambda **kw: mock)
+    
+    suggest_highlights("some transcript", "key", "model/x", 2, context="Focus on coding")
+    
+    assert mock.post.called
+    called_args = mock.post.call_args[1]
+    payload = called_args["json"]
+    system_prompt = payload["messages"][0]["content"]
+    assert "ADDITIONAL VIDEO CONTEXT & EDITING DIRECTIONS:" in system_prompt
+    assert "Focus on coding" in system_prompt
+
+
 def test_suggest_highlights_with_segments(monkeypatch):
     mock = _mock_client([_ok_response(VALID_CLIPS_JSON)])
     monkeypatch.setattr("shorts.highlights.httpx.Client", lambda **kw: mock)

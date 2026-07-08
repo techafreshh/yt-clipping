@@ -81,6 +81,7 @@ def suggest_highlights(
     count: int,
     segments: list | None = None,
     total_duration: float | None = None,
+    context: str | None = None,
 ) -> list[Clip]:
     """Call OpenRouter LLM to suggest clip-worthy highlights from transcript.
 
@@ -109,6 +110,9 @@ def suggest_highlights(
         'Return JSON: {"clips": [{"start": "MM:SS", "end": "MM:SS", "slug": "kebab-case-name", "hook": "one-line hook"}]}.\n'
         "start and end are timestamps in MM:SS format. Each clip must be at least 30 seconds."
     )
+
+    if context:
+        system_prompt += f"\n\nADDITIONAL VIDEO CONTEXT & EDITING DIRECTIONS:\n{context.strip()}"
 
     user_content = transcript_text
     if segments and total_duration is not None:

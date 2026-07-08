@@ -163,5 +163,9 @@ def test_captions_true_calls_generate_ass(mock_req, mock_load, mock_fetch, mock_
 @patch("shorts.pipeline.require", return_value="fake-key")
 def test_captions_false_skips_generate_ass(mock_req, mock_load, mock_fetch, mock_save_t, mock_suggest, mock_validate, mock_save_c, mock_load_clips, mock_cut, mock_dl, mock_copy):
     with patch("shorts.pipeline.generate_ass") as mock_gen:
-        run_pipeline("ep1", youtube_url="http://yt.com/v", model="model-x", captions=False, log=MagicMock())
+        run_pipeline(
+            "ep1", youtube_url="http://yt.com/v", model="model-x",
+            captions=False, crop={"x": 0.1, "y": 0.1, "w": 0.8, "h": 0.8},
+            log=MagicMock()
+        )
         mock_gen.assert_not_called()

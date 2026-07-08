@@ -6,7 +6,7 @@ import io
 import json
 import zipfile
 from pathlib import Path
-from typing import Generator
+from typing import Generator, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
@@ -137,7 +137,7 @@ def create_app() -> FastAPI:
         )
 
     @app.get("/api/cut/{name}")
-    def cut_all(name: str, captions: bool = False, crop: str = None):
+    def cut_all(name: str, captions: bool = False, crop: str = None, title_color: Optional[str] = None):
         name = name.removesuffix(".mp4")
         from shorts.captions import generate_ass
         from shorts.config import settings
@@ -169,14 +169,20 @@ def create_app() -> FastAPI:
                 slug = clip.slug
                 yield f"data: {json.dumps({'clip': slug, 'status': 'cutting', 'index': i, 'total': total})}\n\n"
                 try:
+                    clip_title = getattr(clip, "hook", None)
+                    clip_crop = global_crop or (clip.crop.model_dump() if clip.crop else None)
+                    show_title = clip_title and (clip_crop is None)
+
                     subtitle_path = None
-                    if captions and transcript:
+                    if (captions and transcript) or show_title:
                         subtitle_path = generate_ass(
-                            name, clip.slug, transcript,
+                            name, clip.slug,
+                            transcript if captions else None,
                             parse_timestamp(clip.start), parse_timestamp(clip.end),
+                            title=clip_title if show_title else None,
+                            title_color=title_color
                         )
 
-                    clip_crop = global_crop or (clip.crop.model_dump() if clip.crop else None)
                     result = cut_clip(name, clip, crop=clip_crop, subtitle_path=subtitle_path)
 
                     out_dir = Path("output") / name
@@ -325,6 +331,7 @@ def create_app() -> FastAPI:
         name = data.get("name")
         count = data.get("count", 5)
         model = data.get("model")
+        context = data.get("context")
 
         if not name:
             raise HTTPException(400, "name required")
@@ -342,7 +349,11 @@ def create_app() -> FastAPI:
         max_duration = max(seg.end for seg in cached.segments)
 
         try:
-            clips = suggest_highlights("", api_key, use_model, count, segments=cached.segments, total_duration=max_duration)
+            clips = suggest_highlights(
+                "", api_key, use_model, count,
+                segments=cached.segments, total_duration=max_duration,
+                context=context
+            )
             clips = validate_clips(clips, max_duration)
         except (RuntimeError, ValueError) as e:
             raise HTTPException(502, str(e))

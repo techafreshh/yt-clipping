@@ -29,6 +29,8 @@ def run_pipeline(
     crop: dict | None = None,
     whisper_model: str = "base",
     resolution: int = 1080,
+    suggest_context: Optional[str] = None,
+    title_color: Optional[str] = None,
     log: Callable[[str], None] = print,
 ) -> dict:
     """Run full pipeline: download -> transcript -> suggest -> cut."""
@@ -78,7 +80,7 @@ def run_pipeline(
         log(f"[{step}/{steps}] Suggesting highlights")
         api_key = require(settings, "openrouter_api_key")
         max_duration = max(seg.end for seg in cached.segments)
-        clips = suggest_highlights("", api_key, model, 5, segments=cached.segments, total_duration=max_duration)
+        clips = suggest_highlights("", api_key, model, 5, segments=cached.segments, total_duration=max_duration, context=suggest_context)
         clips = validate_clips(clips, max_duration)
         save_clips(name, clips)
         log(f"  Saved {len(clips)} clips")
@@ -106,13 +108,25 @@ def run_pipeline(
     for i, clip in enumerate(clips, 1):
         log(f"  Clip {i}/{total}: {clip.slug}")
         try:
+            clip_title = getattr(clip, "hook", None)
+            clip_crop = crop or (clip.crop.model_dump() if clip.crop else None)
+            show_title = clip_title and (clip_crop is None)
+
             subtitle_path = None
-            if captions:
-                log("    Generating subtitles...")
-                subtitle_path = generate_ass(name, clip.slug, cached, parse_timestamp(clip.start), parse_timestamp(clip.end))
+            if captions or show_title:
+                if captions:
+                    log("    Generating subtitles...")
+                else:
+                    log("    Generating title...")
+                subtitle_path = generate_ass(
+                    name, clip.slug,
+                    cached if captions else None,
+                    parse_timestamp(clip.start), parse_timestamp(clip.end),
+                    title=clip_title if show_title else None,
+                    title_color=title_color
+                )
 
             log("    Rendering video (cutting, cropping, and burning captions in single pass)...")
-            clip_crop = crop or (clip.crop.model_dump() if clip.crop else None)
             result = cut_clip(name, clip, remove_silence_flag=remove_silence, crop=clip_crop, subtitle_path=subtitle_path)
 
             out_dir = Path("output") / name

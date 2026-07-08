@@ -105,8 +105,8 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
 /* --- Auto Tab --- */
 .auto-section { display: flex; flex-direction: column; gap: 8px; }
-.auto-section input, .auto-section select { background: #111827; border: 1px solid #4b5563; color: #e5e7eb; padding: 6px 10px; border-radius: 6px; width: 100%; font-size: 0.85rem; transition: border-color 0.2s; }
-.auto-section input:focus { outline: none; border-color: #60a5fa; }
+.auto-section input, .auto-section select, .auto-section textarea { background: #111827; border: 1px solid #4b5563; color: #e5e7eb; padding: 6px 10px; border-radius: 6px; width: 100%; font-size: 0.85rem; transition: border-color 0.2s; font-family: inherit; }
+.auto-section input:focus, .auto-section textarea:focus { outline: none; border-color: #60a5fa; }
 .auto-section button { width: 100%; }
 #auto-status { font-size: 0.8rem; color: #9ca3af; min-height: 1.2em; }
 #auto-clip-list { display: flex; flex-direction: column; gap: 6px; }
@@ -208,6 +208,7 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
       </div>
       <div class="section auto-section">
         <div class="section-label">AI Suggest</div>
+        <textarea id="auto-context" rows="3" placeholder="Describe details about the video (e.g. podcast, movie, funny moments, topics to focus on)" aria-label="Extra instructions"></textarea>
         <input id="auto-count" type="number" value="10" min="1" max="30" aria-label="Max clips">
         <button id="auto-suggest-btn" disabled>Suggest Clips</button>
       </div>
@@ -238,6 +239,19 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
       </div>
       <div class="cut-row">
         <label><input type="checkbox" id="audio-toggle"> Export audio</label>
+      </div>
+      <div class="cut-row" style="margin-top: 10px; display: flex; flex-direction: column; gap: 4px;">
+        <label for="title-color-select" style="font-size: 0.8rem; color: #9ca3af;">Title Background Color:</label>
+        <select id="title-color-select" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; font-size: 0.85rem; width: 100%;">
+          <option value="random">Random Color</option>
+          <option value="purple">Purple/Indigo</option>
+          <option value="red">Rose/Red</option>
+          <option value="orange">Orange</option>
+          <option value="green">Emerald/Green</option>
+          <option value="blue">Blue</option>
+          <option value="yellow">Amber/Yellow</option>
+          <option value="dark">Slate/Dark</option>
+        </select>
       </div>
       <div class="progress-list" id="progress"></div>
     </div>
@@ -417,12 +431,13 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
     if (!projectName) return;
     const btn = $('#auto-suggest-btn');
     const count = parseInt($('#auto-count').value) || 5;
+    const context = $('#auto-context').value.trim();
     btn.disabled = true; btn.textContent = 'Suggesting...';
     $('#auto-status').textContent = 'AI is suggesting clips...';
     try {
       const res = await fetch('/api/auto/suggest', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ name: projectName, count }),
+        body: JSON.stringify({ name: projectName, count, context }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Failed');
@@ -798,7 +813,8 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
     cutBtn.disabled = true;
     progressDiv.innerHTML = '';
     const hasCaptions = captionsToggle.checked;
-    let url = `/api/cut/${projectName}?captions=${hasCaptions}`;
+    const titleColor = $('#title-color-select').value;
+    let url = `/api/cut/${projectName}?captions=${hasCaptions}&title_color=${titleColor}`;
     if (globalCrop) url += `&crop=${encodeURIComponent(JSON.stringify(globalCrop))}`;
     const es = new EventSource(url);
     es.onmessage = (e) => {

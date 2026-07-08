@@ -257,36 +257,35 @@ def crop_to_vertical(input_path: Path, output_path: Path, crop: dict | None = No
 
     If crop dict is provided, crops/zooms to that region (filling the frame).
     Otherwise, scales the video to fit the container with black letterbox bars.
-    If title is provided and no crop is set, overlays the title text in the
-    top letterbox bar area.
     Uses GPU encoding (h264_nvenc) when available, falls back to CPU (libx264).
     """
     src_w, src_h = _probe_dimensions(input_path)
 
+    # 9:16 aspect ratio targets
+    OUTPUT_WIDTH = 1080
+    OUTPUT_HEIGHT = 1920
+
     if crop:
+        # Scale crop box from normalized coordinates to source coordinates
         cx = int(crop["x"] * src_w)
         cy = int(crop["y"] * src_h)
         cw = int(crop["w"] * src_w)
         ch = int(crop["h"] * src_h)
-        filter_complex = (
-            f"crop={cw}:{ch}:{cx}:{cy},"
-            f"scale={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:force_original_aspect_ratio=increase,"
-            f"crop={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}"
-        )
+
+        # Force even numbers to satisfy libx264/nvenc requirements
+        cx = cx & ~1
+        cy = cy & ~1
+        cw = cw & ~1
+        ch = ch & ~1
+
+        # We must output exactly 1080x1920. Scale the cropped region to fill it.
+        filter_complex = f"crop={cw}:{ch}:{cx}:{cy},scale={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}"
     else:
+        # Fit inside 1080x1920 container, padded with black bars
         filter_complex = (
             f"scale={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:force_original_aspect_ratio=decrease,"
             f"pad={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:(ow-iw)/2:(oh-ih)/2"
         )
-        # Add title overlay in the top letterbox bar when no crop is applied
-        if title and _detect_drawtext():
-            safe_title = title.replace("'", "\u2019").replace("\\", "\\\\").replace(":", "\\\\:").replace("%", "%%")
-            filter_complex += (
-                f",drawtext=text='{safe_title}'"
-                f":fontsize=42:fontcolor=white"
-                f":shadowcolor=black@0.6:shadowx=2:shadowy=2"
-                f":x=(w-text_w)/2:y=60"
-            )
 
     if subtitle_path:
         escaped = str(subtitle_path).replace("\\", "/").replace(":", "\\:")

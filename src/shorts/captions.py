@@ -90,10 +90,12 @@ def _group_words(words: list[CaptionWord], max_group: int = 4, pause_threshold: 
 
 
 def generate_ass(
-    name: str, slug: str, transcript: Transcript, clip_start: float, clip_end: float,
+    name: str, slug: str, transcript: Transcript | None, clip_start: float, clip_end: float,
     alignment: int | None = None, margin_v: int | None = None,
+    title: str | None = None, title_color: str | None = None,
 ) -> Path:
-    """Generate an ASS subtitle file with word-by-word highlighting."""
+    """Generate an ASS subtitle file with word-by-word highlighting and optional title overlay."""
+    import random
     from shorts.config import settings
 
     if alignment is None:
@@ -101,8 +103,16 @@ def generate_ass(
     if margin_v is None:
         margin_v = settings.caption_margin_v
 
-    words = _extract_words(transcript, clip_start, clip_end)
-    groups = _group_words(words)
+    # Map from color name to ASS BGR format (&H00BBGGRR)
+    COLORS = {
+        "purple": "&H00CE5B4A",  # #4a5bce
+        "red": "&H00481DE1",     # #e11d48
+        "orange": "&H000C58EA",  # #ea580c
+        "green": "&H00699605",   # #059669
+        "blue": "&H00EB6325",    # #2563eb
+        "yellow": "&H000677D9",  # #d97706
+        "dark": "&H003B291E",    # #1e293b
+    }
 
     lines = [
         "[Script Info]",
@@ -114,48 +124,75 @@ def generate_ass(
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
         f"Style: Default,Arial Black,68,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,2,0,1,5,0,{alignment},40,40,{margin_v},1",
+    ]
+
+    if title:
+        resolved_color = title_color
+        if not resolved_color or resolved_color == "random":
+            resolved_color = random.choice(list(COLORS.keys()))
+        
+        if resolved_color in COLORS:
+            back_color = COLORS[resolved_color]
+        elif resolved_color.startswith("&H") and len(resolved_color) == 10:
+            back_color = resolved_color
+        else:
+            back_color = COLORS["purple"]
+
+        # Style: Title, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+        lines.append(
+            f"Style: Title,Arial,48,&H00FFFFFF,&H00000000,&H00000000,{back_color},-1,0,0,0,100,100,0,0,3,15,0,8,60,60,80,1"
+        )
+
+    lines.extend([
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
-    ]
+    ])
 
-    prev_group_end = 0.0
+    if title:
+        safe_title = title.replace("{", "").replace("}", "").replace("\\", "/")
+        lines.append(f"Dialogue: 0,0:00:00.00,9:59:59.99,Title,,0,0,0,,{safe_title}")
 
-    for group in groups:
-        if not group:
-            continue
+    if transcript:
+        words = _extract_words(transcript, clip_start, clip_end)
+        groups = _group_words(words)
+        prev_group_end = 0.0
 
-        group_start = max(group[0].start, prev_group_end)
-        group_end = group[-1].end
-
-        if group_end <= group_start:
-            continue
-
-        for wi, word in enumerate(group):
-            word_start = max(word.start, group_start)
-
-            if wi < len(group) - 1:
-                word_end = group[wi + 1].start
-            else:
-                word_end = group_end
-
-            word_end = max(word_end, word_start + 0.1)
-
-            if word_end <= word_start:
+        for group in groups:
+            if not group:
                 continue
 
-            parts = []
-            for wj, w in enumerate(group):
-                text_upper = w.text.upper()
-                if wj == wi:
-                    parts.append(f"{{\\c&H00FFFF&\\b1}}{text_upper}{{\\c&HFFFFFF&\\b1}}")
+            group_start = max(group[0].start, prev_group_end)
+            group_end = group[-1].end
+
+            if group_end <= group_start:
+                continue
+
+            for wi, word in enumerate(group):
+                word_start = max(word.start, group_start)
+
+                if wi < len(group) - 1:
+                    word_end = group[wi + 1].start
                 else:
-                    parts.append(text_upper)
-            line = " ".join(parts)
+                    word_end = group_end
 
-            lines.append(f"Dialogue: 0,{_format_ass_time(word_start)},{_format_ass_time(word_end)},Default,,0,0,0,,{line}")
+                word_end = max(word_end, word_start + 0.1)
 
-        prev_group_end = group_end
+                if word_end <= word_start:
+                    continue
+
+                parts = []
+                for wj, w in enumerate(group):
+                    text_upper = w.text.upper()
+                    if wj == wi:
+                        parts.append(f"{{\\c&H00FFFF&\\b1}}{text_upper}{{\\c&HFFFFFF&\\b1}}")
+                    else:
+                        parts.append(text_upper)
+                line = " ".join(parts)
+
+                lines.append(f"Dialogue: 0,{_format_ass_time(word_start)},{_format_ass_time(word_end)},Default,,0,0,0,,{line}")
+
+            prev_group_end = group_end
 
     out_dir = WORKING_DIR / name
     out_dir.mkdir(parents=True, exist_ok=True)
