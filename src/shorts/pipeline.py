@@ -139,7 +139,7 @@ def step_cut(
     fail_fast: bool = False,
     resume: bool = True,
     force: bool = False,
-    workers: int = 1,
+    workers: int = 0,
     transcript: Optional[Transcript] = None,
     youtube_url: Optional[str] = None,
     local_path: Optional[str] = None,
@@ -153,9 +153,11 @@ def step_cut(
     ``resume=False`` or ``force=True`` to re-render everything (e.g. after
     editing crops in clips/{name}.json).
 
-    ``workers`` > 1 renders up to that many clips concurrently — ffmpeg runs
-    as subprocesses, so clips genuinely overlap. Most useful with GPU/NVENC
-    encoding; on CPU-only machines the libx264 jobs compete for cores.
+    ``workers`` controls rendering concurrency: 0 (default) renders all clips
+    at once with one worker per clip, 1 renders sequentially, and N > 1
+    renders up to N clips concurrently — ffmpeg runs as subprocesses, so
+    clips genuinely overlap. Most useful with GPU/NVENC encoding; on
+    CPU-only machines the libx264 jobs compete for cores (use 1).
     """
     clips = load_clips(name)
     if clips is None:
@@ -176,7 +178,6 @@ def step_cut(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     total = len(clips)
-    max_workers = max(1, workers)
 
     def indent_for(clip) -> str:
         # Parallel renders interleave logs, so tag them with the clip slug
@@ -248,6 +249,9 @@ def step_cut(
         else:
             jobs.append((i, clip, output_path))
 
+    # workers=0 (default) -> one worker per clip: everything renders at once
+    max_workers = len(jobs) if workers <= 0 else max(1, workers)
+
     if jobs:
         with ThreadPoolExecutor(max_workers=min(max_workers, len(jobs))) as pool:
             futures = {
@@ -316,13 +320,15 @@ def run_pipeline(
     bg_music: Optional[str] = None,
     bg_music_volume: Optional[float] = None,
     force: bool = False,
-    workers: int = 1,
+    workers: int = 0,
     log: Callable[[str], None] = print,
 ) -> dict:
     """Run full pipeline: download -> transcript -> suggest -> cut.
 
     Cached artifacts (raw video, transcript, clips, rendered outputs) are
-    reused across runs; pass ``force=True`` to bypass every cache.
+    reused across runs; pass ``force=True`` to bypass every cache. Clips
+    render concurrently by default (one worker per clip); pass
+    ``workers=1`` for sequential rendering on CPU-only machines.
     """
     steps = 4 if youtube_url or local_path else 3
     step = 0

@@ -90,7 +90,12 @@ def test_cached_transcript_skips_fetch(mock_req, mock_load, mock_fetch, mock_sav
 @patch("shorts.pipeline.load_cached", return_value=None)
 @patch("shorts.pipeline.require", return_value="fake-key")
 def test_per_clip_error_continues(mock_req, mock_load, mock_fetch, mock_save_t, mock_suggest, mock_validate, mock_save_c, mock_load_clips, mock_cut, mock_dl, mock_copy):
-    mock_cut.side_effect = [RuntimeError("ffmpeg fail"), FAKE_CUT]
+    def fail_clip_one(name, clip, **kw):
+        if clip.slug == "clip-one":
+            raise RuntimeError("ffmpeg fail")
+        return FAKE_CUT
+
+    mock_cut.side_effect = fail_clip_one
     result = run_pipeline("ep1", youtube_url="http://yt.com/v", model="model-x", log=MagicMock())
     assert result == {"total": 2, "success": 1, "failed": 1, "errors": ["clip-one: ffmpeg fail"]}
 
@@ -132,7 +137,9 @@ def test_file_not_found_propagates(mock_req, mock_load, mock_fetch, mock_save_t,
 @patch("shorts.pipeline.require", return_value="fake-key")
 def test_fail_fast_stops_on_first_error(mock_req, mock_load, mock_fetch, mock_save_t, mock_suggest, mock_validate, mock_save_c, mock_load_clips, mock_cut, mock_dl, mock_copy):
     mock_cut.side_effect = [RuntimeError("fail"), FAKE_CUT]
-    result = run_pipeline("ep1", youtube_url="http://yt.com/v", model="model-x", fail_fast=True, log=MagicMock())
+    # workers=1 keeps this deterministic: clip-two is still queued (not yet
+    # started) when clip-one fails, so fail-fast cancels it before it renders
+    result = run_pipeline("ep1", youtube_url="http://yt.com/v", model="model-x", fail_fast=True, workers=1, log=MagicMock())
     assert result["success"] == 0
     assert result["failed"] == 1
     assert result["errors"] == ["clip-one: fail"]
@@ -298,6 +305,35 @@ def test_step_cut_workers_render_concurrently(mock_load_clips, mock_cut, mock_co
 
     assert result["success"] == 2
     assert peak[0] == 2  # two clips were rendering at the same time
+
+
+@patch("shutil.copy2")
+@patch("shorts.pipeline.cut_clip")
+@patch("shorts.pipeline.load_clips", return_value=FAKE_CLIPS)
+def test_step_cut_default_workers_equal_clip_count(mock_load_clips, mock_cut, mock_copy):
+    import threading
+    import time
+
+    active: list[str] = []
+    peak = [0]
+    lock = threading.Lock()
+
+    def slow_cut(name, clip, **kw):
+        with lock:
+            active.append(clip.slug)
+            peak[0] = max(peak[0], len(active))
+        time.sleep(0.05)
+        with lock:
+            active.remove(clip.slug)
+        return FAKE_CUT
+
+    mock_cut.side_effect = slow_cut
+
+    # workers=0 (default) -> one worker per clip, all rendering at once
+    result = step_cut("ep1", log=MagicMock())
+
+    assert result["success"] == 2
+    assert peak[0] == 2
 
 
 @patch("shutil.copy2")

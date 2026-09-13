@@ -176,7 +176,7 @@ def cut(
     title_color: Optional[str] = typer.Option("random", "--title-color", help="Title overlay background color (purple, red, orange, green, blue, yellow, dark, random)"),
     bg_music: Optional[str] = typer.Option(None, "--bg-music", help="Background music URL or local file path"),
     bg_music_volume: Optional[float] = typer.Option(None, "--bg-music-volume", help="Background music volume level"),
-    workers: int = typer.Option(1, "--workers", help="Number of clips to render in parallel (GPU/NVENC recommended for >1)"),
+    workers: int = typer.Option(0, "--workers", help="Clips to render in parallel; 0 = one worker per clip (default). Use 1 on CPU-only machines"),
 ):
     """Cut and export vertical shorts from clip specs."""
     from shorts.pipeline import step_cut
@@ -226,7 +226,7 @@ def run(
     bg_music: Optional[str] = typer.Option(None, "--bg-music", help="Background music URL or local file path"),
     bg_music_volume: Optional[float] = typer.Option(None, "--bg-music-volume", help="Background music volume level"),
     force: bool = typer.Option(False, "--force", help="Re-download, re-fetch, re-suggest, and re-render, ignoring cached artifacts"),
-    workers: int = typer.Option(1, "--workers", help="Number of clips to render in parallel (GPU/NVENC recommended for >1)"),
+    workers: int = typer.Option(0, "--workers", help="Clips to render in parallel; 0 = one worker per clip (default). Use 1 on CPU-only machines"),
 ):
     """Run the full pipeline end-to-end.
 
