@@ -153,12 +153,8 @@ def test_cut_captions_success(tmp_path, monkeypatch):
     import subprocess
     monkeypatch.setattr(subprocess, "run", lambda *a, **kw: MagicMock())
 
-    def mock_copy(src, dst):
-        dst = Path(dst)
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_bytes(b"output")
-
-    monkeypatch.setattr("shutil.copy2", mock_copy)
+    copied = []
+    monkeypatch.setattr("shutil.copy2", lambda src, dst: copied.append(dst))
 
     from unittest.mock import MagicMock
     result = runner.invoke(app, ["cut", "ep1", "--captions"])

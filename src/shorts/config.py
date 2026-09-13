@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Optional
 
-import typer
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,7 +28,7 @@ def require(settings: Settings, field_name: str) -> str:
     """Return field value or raise if missing."""
     value = getattr(settings, field_name)
     if value is None:
-        raise typer.BadParameter(f"Missing required config: {field_name.upper()}. Set it in .env")
+        raise RuntimeError(f"Missing required config: {field_name.upper()}. Set it in .env")
     return value
 
 

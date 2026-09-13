@@ -167,6 +167,40 @@ Run the full pipeline end-to-end.
 | `--remove-silence` | Remove silent gaps |
 | `--audio` | Extract audio for podcast clips |
 | `--whisper-model` | Whisper model for local transcription |
+| `--force` | Re-download, re-fetch, re-suggest, and re-render, ignoring all cached artifacts |
+
+## Resume & Caching
+
+The pipeline is cache-aware by default. On every run each step reuses its
+on-disk artifact instead of redoing the work:
+
+| Step | Cache | Skipped when... |
+|------|-------|-----------------|
+| Download | `raw/{name}.mp4` | the file already exists |
+| Transcript | `transcripts/{name}.json` | a cached transcript exists |
+| Suggest | `clips/{name}.json` | the clips file exists |
+| Cut | `output/{name}/*.mp4` | the clip's output file already exists |
+
+This means:
+
+- **Re-runs are cheap.** `shorts run` after a failed or interrupted batch
+  skips everything that already succeeded and only renders the missing
+  clips (the same applies if the runtime dies mid-batch in Colab).
+- **`shorts run --force` bypasses every cache** — full re-download,
+  re-fetch, re-suggest, and re-render.
+- The cut step's resume is controlled by its `resume` flag
+  (`step_cut(..., resume=False)` re-renders everything, e.g. after editing
+  crops in `clips/{name}.json`).
+
+## Google Colab
+
+[YouTube_Clipper_Colab.ipynb](YouTube_Clipper_Colab.ipynb) runs the full
+pipeline on a free GPU runtime with output saved to Google Drive
+(`My Drive/shorts/<video>/`). It calls the same pipeline step functions as
+the CLI, so caching and resume work there too: cached steps are skipped
+automatically, and an interrupted runtime resumes from the last exported
+clip. Keys come from Colab Secrets (`OPENROUTER_API_KEY`,
+`SUPADATA_API_KEY`), and an interactive 9:16 crop selector is included.
 
 ### `shorts serve`
 

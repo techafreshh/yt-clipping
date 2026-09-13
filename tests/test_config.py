@@ -1,7 +1,6 @@
 """Tests for the configuration module."""
 
 import pytest
-from click.exceptions import BadParameter
 from typer.testing import CliRunner
 
 from shorts.cli import app
@@ -30,7 +29,7 @@ def test_settings_loads_from_env(monkeypatch):
 
 def test_require_raises_on_missing():
     s = Settings(_env_file=None)
-    with pytest.raises(BadParameter):
+    with pytest.raises(RuntimeError, match="SUPADATA_API_KEY"):
         require(s, "supadata_api_key")
 
 

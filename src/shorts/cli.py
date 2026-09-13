@@ -147,11 +147,11 @@ def suggest(
         typer.echo("Error: no cached transcript. Run 'shorts transcript' first.", err=True)
         raise typer.Exit(1)
 
-    api_key = require(settings, "openrouter_api_key")
     use_model = model or settings.default_model
     max_duration = max(seg.end for seg in cached.segments)
 
     try:
+        api_key = require(settings, "openrouter_api_key")
         clips = suggest_highlights(
             "", api_key, use_model, count,
             segments=cached.segments, total_duration=max_duration,
@@ -300,8 +300,13 @@ def run(
     title_color: Optional[str] = typer.Option("random", "--title-color", help="Title overlay background color (purple, red, orange, green, blue, yellow, dark, random)"),
     bg_music: Optional[str] = typer.Option(None, "--bg-music", help="Background music URL or local file path"),
     bg_music_volume: Optional[float] = typer.Option(None, "--bg-music-volume", help="Background music volume level"),
+    force: bool = typer.Option(False, "--force", help="Re-download, re-fetch, re-suggest, and re-render, ignoring cached artifacts"),
 ):
-    """Run the full pipeline end-to-end."""
+    """Run the full pipeline end-to-end.
+
+    Cached artifacts (raw video, transcript, clips, rendered outputs) are
+    reused across runs; pass --force to bypass every cache.
+    """
     from shorts.config import settings
     from shorts.downloader import derive_name_from_path, derive_name_from_url, get_youtube_title
     from shorts.pipeline import run_pipeline
@@ -346,6 +351,7 @@ def run(
             title_color=title_color,
             bg_music=bg_music,
             bg_music_volume=bg_music_volume,
+            force=force,
             log=typer.echo,
         )
     except (RuntimeError, FileNotFoundError) as e:
