@@ -9,6 +9,7 @@ rendered output) unless ``force=True``. ``run_pipeline`` chains them.
 from __future__ import annotations
 
 import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -134,9 +135,11 @@ def step_cut(
     title_color: Optional[str] = None,
     bg_music: Optional[str] = None,
     bg_music_volume: Optional[float] = None,
+    audio: bool = False,
     fail_fast: bool = False,
     resume: bool = True,
     force: bool = False,
+    workers: int = 1,
     transcript: Optional[Transcript] = None,
     youtube_url: Optional[str] = None,
     local_path: Optional[str] = None,
@@ -149,6 +152,10 @@ def step_cut(
     skipped, so an interrupted batch continues where it left off. Pass
     ``resume=False`` or ``force=True`` to re-render everything (e.g. after
     editing crops in clips/{name}.json).
+
+    ``workers`` > 1 renders up to that many clips concurrently — ffmpeg runs
+    as subprocesses, so clips genuinely overlap. Most useful with GPU/NVENC
+    encoding; on CPU-only machines the libx264 jobs compete for cores.
     """
     clips = load_clips(name)
     if clips is None:
@@ -169,72 +176,103 @@ def step_cut(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     total = len(clips)
+    max_workers = max(1, workers)
+
+    def indent_for(clip) -> str:
+        # Parallel renders interleave logs, so tag them with the clip slug
+        return f"  [{clip.slug}] " if max_workers > 1 else "    "
+
+    def render_clip(i: int, clip, output_path: Path) -> dict:
+        """Render one clip into output_path; returns its exported-clip entry."""
+        log(f"  Clip {i}/{total}: {clip.slug}")
+        indent = indent_for(clip)
+
+        clip_title = getattr(clip, "hook", None)
+        clip_crop = crop or (clip.crop.model_dump() if clip.crop else None)
+        show_title = clip_title and (clip_crop is None)
+
+        subtitle_path = None
+        if captions or show_title:
+            log(f"{indent}Generating {'subtitles' if captions else 'title'}...")
+            subtitle_path = generate_ass(
+                name, clip.slug,
+                transcript if captions else None,
+                parse_timestamp(clip.start), parse_timestamp(clip.end),
+                title=clip_title if show_title else None,
+                title_color=title_color
+            )
+
+        log(f"{indent}Rendering video (cutting, cropping, and burning captions in single pass)...")
+        volume = bg_music_volume if bg_music_volume is not None else getattr(settings, "default_bg_music_volume", 0.1)
+        result = cut_clip(
+            name, clip, remove_silence_flag=remove_silence, crop=clip_crop,
+            subtitle_path=subtitle_path, bg_music=resolved_bg_music, bg_music_volume=volume
+        )
+
+        shutil.copy2(result.video_path, output_path)
+        log(f"{indent}-> {output_path}")
+
+        if audio:
+            stem = f"{name}_short_{i:02d}_{clip.slug}"
+            extract_audio(output_path, stem)
+            audio_out = out_dir / f"{stem}_audio.wav"
+            shutil.move(str(RAW_DIR / f"{stem}_audio.wav"), str(audio_out))
+            log(f"{indent}-> {audio_out}")
+
+        return {
+            "slug": clip.slug,
+            "start": clip.start,
+            "end": clip.end,
+            "hook": getattr(clip, "hook", ""),
+            "output_path": str(output_path),
+        }
+
     success = 0
     failed = 0
     errors: list[str] = []
-    exported_clips = []
+    exported_by_index: dict[int, dict] = {}
 
+    jobs = []
     for i, clip in enumerate(clips, 1):
         output_path = out_dir / f"{name}_short_{i:02d}_{clip.slug}.mp4"
-
         if resume and not force and output_path.exists():
             log(f"  Clip {i}/{total}: {clip.slug} — output exists, skipping")
             success += 1
-            exported_clips.append({
+            exported_by_index[i] = {
                 "slug": clip.slug,
                 "start": clip.start,
                 "end": clip.end,
                 "hook": getattr(clip, "hook", ""),
                 "output_path": str(output_path),
-            })
-            continue
+            }
+        else:
+            jobs.append((i, clip, output_path))
 
-        log(f"  Clip {i}/{total}: {clip.slug}")
-        try:
-            clip_title = getattr(clip, "hook", None)
-            clip_crop = crop or (clip.crop.model_dump() if clip.crop else None)
-            show_title = clip_title and (clip_crop is None)
+    if jobs:
+        with ThreadPoolExecutor(max_workers=min(max_workers, len(jobs))) as pool:
+            futures = {
+                pool.submit(render_clip, i, clip, output_path): (i, clip)
+                for i, clip, output_path in jobs
+            }
+            for future in as_completed(futures):
+                i, clip = futures[future]
+                try:
+                    exported_by_index[i] = future.result()
+                    success += 1
+                except FileNotFoundError:
+                    for f in futures:
+                        f.cancel()
+                    raise
+                except Exception as e:
+                    log(f"{indent_for(clip)}Warning: clip failed - {e}")
+                    errors.append(f"{clip.slug}: {e}")
+                    failed += 1
+                    if fail_fast:
+                        for f in futures:
+                            f.cancel()
+                        break
 
-            subtitle_path = None
-            if captions or show_title:
-                if captions:
-                    log("    Generating subtitles...")
-                else:
-                    log("    Generating title...")
-                subtitle_path = generate_ass(
-                    name, clip.slug,
-                    transcript if captions else None,
-                    parse_timestamp(clip.start), parse_timestamp(clip.end),
-                    title=clip_title if show_title else None,
-                    title_color=title_color
-                )
-
-            log("    Rendering video (cutting, cropping, and burning captions in single pass)...")
-            volume = bg_music_volume if bg_music_volume is not None else getattr(settings, "default_bg_music_volume", 0.1)
-            result = cut_clip(
-                name, clip, remove_silence_flag=remove_silence, crop=clip_crop,
-                subtitle_path=subtitle_path, bg_music=resolved_bg_music, bg_music_volume=volume
-            )
-
-            shutil.copy2(result.video_path, output_path)
-            log(f"    -> {output_path}")
-            success += 1
-            exported_clips.append({
-                "slug": clip.slug,
-                "start": clip.start,
-                "end": clip.end,
-                "hook": getattr(clip, "hook", ""),
-                "output_path": str(output_path),
-            })
-        except FileNotFoundError:
-            raise
-        except Exception as e:
-            log(f"    Warning: clip failed - {e}")
-            errors.append(f"{clip.slug}: {e}")
-            failed += 1
-            if fail_fast:
-                break
-            continue
+    exported_clips = [exported_by_index[i] for i in sorted(exported_by_index)]
 
     hook_url = webhook_url or getattr(settings, "n8n_webhook_url", None)
     if hook_url:
@@ -278,6 +316,7 @@ def run_pipeline(
     bg_music: Optional[str] = None,
     bg_music_volume: Optional[float] = None,
     force: bool = False,
+    workers: int = 1,
     log: Callable[[str], None] = print,
 ) -> dict:
     """Run full pipeline: download -> transcript -> suggest -> cut.
@@ -325,6 +364,7 @@ def run_pipeline(
         fail_fast=fail_fast,
         resume=not force,
         force=force,
+        workers=workers,
         transcript=transcript,
         youtube_url=youtube_url,
         local_path=local_path,

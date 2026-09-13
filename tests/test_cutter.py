@@ -269,7 +269,7 @@ def test_cli_cut_success(tmp_path, monkeypatch):
     (tmp_path / "ep1.json").write_text(json.dumps(clips))
 
     dummy_result = CutResult(video_path=Path("a.mp4"))
-    monkeypatch.setattr("shorts.cutter.cut_clip", lambda name, clip, **kw: dummy_result)
+    monkeypatch.setattr("shorts.pipeline.cut_clip", lambda name, clip, **kw: dummy_result)
 
     # Mock shutil.copy2 to simulate output
     def mock_copy(src, dst):
@@ -293,7 +293,7 @@ def test_cli_cut_missing_source(tmp_path, monkeypatch):
     def raise_fnf(name, clip, **kw):
         raise FileNotFoundError("Missing source: raw/ep1.mp4")
 
-    monkeypatch.setattr("shorts.cutter.cut_clip", raise_fnf)
+    monkeypatch.setattr("shorts.pipeline.cut_clip", raise_fnf)
 
     result = runner.invoke(app, ["cut", "ep1"])
     assert result.exit_code == 1
@@ -316,7 +316,7 @@ def test_cli_cut_runtime_error_continues(tmp_path, monkeypatch):
             raise RuntimeError("ffmpeg failed: codec error")
         return CutResult(video_path=Path("a.mp4"))
 
-    monkeypatch.setattr("shorts.cutter.cut_clip", mock_cut)
+    monkeypatch.setattr("shorts.pipeline.cut_clip", mock_cut)
 
     def mock_copy(src, dst):
         dst = Path(dst)
@@ -336,7 +336,7 @@ def test_cli_cut_with_remove_silence(tmp_path, monkeypatch):
     (tmp_path / "ep1.json").write_text(json.dumps(clips))
 
     dummy_result = CutResult(video_path=Path("a.mp4"))
-    monkeypatch.setattr("shorts.cutter.cut_clip", lambda name, clip, **kw: dummy_result)
+    monkeypatch.setattr("shorts.pipeline.cut_clip", lambda name, clip, **kw: dummy_result)
 
     def mock_copy(src, dst):
         dst = Path(dst)

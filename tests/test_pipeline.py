@@ -262,6 +262,118 @@ def test_step_cut_no_clips_raises(mock_load_clips):
 
 
 @patch("shutil.copy2")
+@patch("shorts.pipeline.cut_clip", return_value=FAKE_CUT)
+@patch("shorts.pipeline.load_clips", return_value=FAKE_CLIPS)
+def test_step_cut_parallel_renders_all_clips(mock_load_clips, mock_cut, mock_copy):
+    result = step_cut("ep1", workers=3, log=MagicMock())
+
+    assert result == {"total": 2, "success": 2, "failed": 0, "errors": []}
+    assert mock_cut.call_count == 2
+    assert mock_copy.call_count == 2
+
+
+@patch("shutil.copy2")
+@patch("shorts.pipeline.cut_clip")
+@patch("shorts.pipeline.load_clips", return_value=FAKE_CLIPS)
+def test_step_cut_workers_render_concurrently(mock_load_clips, mock_cut, mock_copy):
+    import threading
+    import time
+
+    active: list[str] = []
+    peak = [0]
+    lock = threading.Lock()
+
+    def slow_cut(name, clip, **kw):
+        with lock:
+            active.append(clip.slug)
+            peak[0] = max(peak[0], len(active))
+        time.sleep(0.05)
+        with lock:
+            active.remove(clip.slug)
+        return FAKE_CUT
+
+    mock_cut.side_effect = slow_cut
+
+    result = step_cut("ep1", workers=2, log=MagicMock())
+
+    assert result["success"] == 2
+    assert peak[0] == 2  # two clips were rendering at the same time
+
+
+@patch("shutil.copy2")
+@patch("shorts.pipeline.cut_clip")
+@patch("shorts.pipeline.load_clips", return_value=FAKE_CLIPS)
+def test_step_cut_parallel_handles_per_clip_errors(mock_load_clips, mock_cut, mock_copy):
+    def fail_first(name, clip, **kw):
+        if clip.slug == "clip-one":
+            raise RuntimeError("ffmpeg fail")
+        return FAKE_CUT
+
+    mock_cut.side_effect = fail_first
+    result = step_cut("ep1", workers=2, log=MagicMock())
+
+    assert result["success"] == 1
+    assert result["failed"] == 1
+    assert result["errors"] == ["clip-one: ffmpeg fail"]
+
+
+@patch("shutil.copy2")
+@patch("shorts.pipeline.cut_clip", return_value=FAKE_CUT)
+@patch("shorts.pipeline.load_clips", return_value=FAKE_CLIPS)
+def test_step_cut_parallel_resumes_skipped_clips(mock_load_clips, mock_cut, mock_copy):
+    out_dir = Path("output") / "ep1"
+    out_dir.mkdir(parents=True)
+    (out_dir / "ep1_short_01_clip-one.mp4").write_bytes(b"x")
+
+    result = step_cut("ep1", workers=2, log=MagicMock())
+
+    assert result["success"] == 2
+    assert mock_cut.call_count == 1  # only clip-two rendered
+
+
+@patch("shutil.move")
+@patch("shutil.copy2")
+@patch("shorts.pipeline.extract_audio", return_value=Path("raw/ep1_audio.wav"))
+@patch("shorts.pipeline.cut_clip", return_value=FAKE_CUT)
+@patch("shorts.pipeline.load_clips", return_value=FAKE_CLIPS)
+def test_step_cut_audio_exports_wav(mock_load_clips, mock_cut, mock_extract, mock_copy, mock_move):
+    result = step_cut("ep1", audio=True, log=MagicMock())
+
+    assert result["success"] == 2
+    assert mock_extract.call_count == 2
+    assert mock_move.call_count == 2
+
+
+@patch("shorts.pipeline.load_clips", return_value=FAKE_CLIPS)
+def test_step_cut_webhook_receives_ordered_clips(mock_load_clips):
+    import httpx
+
+    def fail_slow(name, clip, **kw):
+        if clip.slug == "clip-one":
+            import time
+            time.sleep(0.05)
+        return FAKE_CUT
+
+    payloads = []
+
+    def fake_post(url, json=None, timeout=None):
+        payloads.append(json)
+
+        class Resp:
+            status_code = 200
+
+        return Resp()
+
+    with patch("shutil.copy2"), patch("shorts.pipeline.cut_clip", side_effect=fail_slow), \
+         patch.object(httpx, "post", side_effect=fake_post):
+        result = step_cut("ep1", workers=2, webhook_url="http://hook", log=MagicMock())
+
+    assert result["success"] == 2
+    assert len(payloads) == 1
+    assert [c["slug"] for c in payloads[0]["clips"]] == ["clip-one", "clip-two"]
+
+
+@patch("shutil.copy2")
 @patch("shorts.pipeline.download_youtube")
 @patch("shorts.pipeline.cut_clip", return_value=FAKE_CUT)
 @patch("shorts.pipeline.load_clips", return_value=FAKE_CLIPS)

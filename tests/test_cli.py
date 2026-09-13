@@ -107,12 +107,10 @@ def test_run_fail_fast_passed_to_pipeline(monkeypatch):
 def test_cut_partial_failure_exits_1(tmp_path, monkeypatch):
     import json
 
-    from shorts.cutter import CutResult
-
     monkeypatch.setattr("shorts.highlights.CLIPS_DIR", tmp_path)
     clips = [{"start": "00:10", "end": "00:40", "slug": "clip-one"}]
     (tmp_path / "ep1.json").write_text(json.dumps(clips))
-    monkeypatch.setattr("shorts.cutter.cut_clip", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("fail")))
+    monkeypatch.setattr("shorts.pipeline.cut_clip", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("fail")))
 
     result = runner.invoke(app, ["cut", "ep1"])
     assert result.exit_code == 1
@@ -124,7 +122,7 @@ def test_cut_captions_requires_transcript(tmp_path, monkeypatch):
     monkeypatch.setattr("shorts.highlights.CLIPS_DIR", tmp_path)
     clips = [{"start": "00:10", "end": "00:40", "slug": "clip-one"}]
     (tmp_path / "ep1.json").write_text(json.dumps(clips))
-    monkeypatch.setattr("shorts.transcript.load_cached", lambda name: None)
+    monkeypatch.setattr("shorts.pipeline.load_cached", lambda name: None)
 
     result = runner.invoke(app, ["cut", "ep1", "--captions"])
     assert result.exit_code == 1
@@ -143,19 +141,40 @@ def test_cut_captions_success(tmp_path, monkeypatch):
     (tmp_path / "ep1.json").write_text(json.dumps(clips))
 
     transcript = Transcript(segments=[TranscriptSegment(start=10, end=40, text="hi")])
-    monkeypatch.setattr("shorts.transcript.load_cached", lambda name: transcript)
+    monkeypatch.setattr("shorts.pipeline.load_cached", lambda name: transcript)
 
     dummy_result = CutResult(video_path=Path("a.mp4"))
-    monkeypatch.setattr("shorts.cutter.cut_clip", lambda name, clip, **kw: dummy_result)
-    monkeypatch.setattr("shorts.captions.generate_ass", lambda *a, **kw: Path("working/ep1/clip-one.ass"))
-
-    # Mock subprocess.run for subtitle burn-in
-    import subprocess
-    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: MagicMock())
+    monkeypatch.setattr("shorts.pipeline.cut_clip", lambda name, clip, **kw: dummy_result)
+    monkeypatch.setattr("shorts.pipeline.generate_ass", lambda *a, **kw: Path("working/ep1/clip-one.ass"))
 
     copied = []
     monkeypatch.setattr("shutil.copy2", lambda src, dst: copied.append(dst))
 
-    from unittest.mock import MagicMock
     result = runner.invoke(app, ["cut", "ep1", "--captions"])
     assert result.exit_code == 0
+
+
+def test_cut_workers_passed_to_step_cut(monkeypatch):
+    captured = {}
+
+    def fake_step_cut(*a, **kw):
+        captured.update(kw)
+        return {"total": 1, "success": 1, "failed": 0, "errors": []}
+
+    monkeypatch.setattr("shorts.pipeline.step_cut", fake_step_cut)
+    result = runner.invoke(app, ["cut", "ep1", "--workers", "3"])
+    assert result.exit_code == 0
+    assert captured.get("workers") == 3
+
+
+def test_run_workers_passed_to_pipeline(monkeypatch):
+    captured = {}
+
+    def fake_pipeline(*a, **kw):
+        captured.update(kw)
+        return {"total": 1, "success": 1, "failed": 0, "errors": []}
+
+    monkeypatch.setattr("shorts.pipeline.run_pipeline", fake_pipeline)
+    result = runner.invoke(app, ["run", "ep1", "--skip-suggest", "--workers", "2"])
+    assert result.exit_code == 0
+    assert captured.get("workers") == 2

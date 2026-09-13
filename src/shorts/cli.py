@@ -176,111 +176,36 @@ def cut(
     title_color: Optional[str] = typer.Option("random", "--title-color", help="Title overlay background color (purple, red, orange, green, blue, yellow, dark, random)"),
     bg_music: Optional[str] = typer.Option(None, "--bg-music", help="Background music URL or local file path"),
     bg_music_volume: Optional[float] = typer.Option(None, "--bg-music-volume", help="Background music volume level"),
+    workers: int = typer.Option(1, "--workers", help="Number of clips to render in parallel (GPU/NVENC recommended for >1)"),
 ):
     """Cut and export vertical shorts from clip specs."""
-    from shorts.cutter import cut_clip
-    from shorts.downloader import RAW_DIR, extract_audio
-    from shorts.highlights import load_clips, parse_timestamp
+    from shorts.pipeline import step_cut
 
-    clips = load_clips(name)
-    if clips is None:
-        typer.echo("Error: no clips found. Run 'shorts suggest' first.", err=True)
+    try:
+        summary = step_cut(
+            name,
+            captions=captions,
+            remove_silence=remove_silence,
+            audio=audio,
+            title_color=title_color,
+            bg_music=bg_music,
+            bg_music_volume=bg_music_volume,
+            fail_fast=fail_fast,
+            resume=False,
+            workers=workers,
+            log=typer.echo,
+        )
+    except (RuntimeError, FileNotFoundError) as e:
+        typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
 
-    transcript = None
-    from shorts.captions import generate_ass
-    if captions:
-        from shorts.transcript import load_cached
-
-        transcript = load_cached(name)
-        if transcript is None:
-            typer.echo("Error: No cached transcript for captions. Run 'shorts transcript' first.", err=True)
-            raise typer.Exit(1)
-
-    if remove_silence and captions:
-        typer.echo("Warning: --remove-silence and --captions together may cause sync issues. Using captions without silence removal.", err=True)
-        remove_silence = False
-
-    resolved_bg_music = None
-    if bg_music:
-        if bg_music.startswith(("http://", "https://")):
-            typer.echo("Resolving background music from URL...")
-            from shorts.downloader import download_audio
-            try:
-                resolved_bg_music = download_audio(bg_music)
-            except Exception as e:
-                typer.echo(f"Warning: failed to download background music URL - {e}", err=True)
-        else:
-            resolved_bg_music = Path(bg_music)
-            if not resolved_bg_music.exists():
-                typer.echo(f"Warning: background music path {bg_music} does not exist.", err=True)
-                resolved_bg_music = None
-
-    success = 0
-    errors: list[str] = []
-    for i, clip in enumerate(clips, 1):
-        typer.echo(f"Cutting clip {i}/{len(clips)}: {clip.slug}")
-        clip_title = getattr(clip, "hook", None)
-        clip_crop = clip.crop.model_dump() if clip.crop else None
-        show_title = clip_title and (clip_crop is None)
-
-        subtitle_path = None
-        if captions or show_title:
-            subtitle_path = generate_ass(
-                name, clip.slug,
-                transcript if captions else None,
-                parse_timestamp(clip.start), parse_timestamp(clip.end),
-                title=clip_title if show_title else None,
-                title_color=title_color
-            )
-
-        try:
-            from shorts.config import settings
-            volume = bg_music_volume if bg_music_volume is not None else getattr(settings, "default_bg_music_volume", 0.1)
-            result = cut_clip(
-                name, clip, remove_silence_flag=remove_silence, crop=clip_crop,
-                subtitle_path=subtitle_path, bg_music=resolved_bg_music, bg_music_volume=volume
-            )
-        except FileNotFoundError as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(1)
-        except RuntimeError as e:
-            typer.echo(f"Warning: {e}", err=True)
-            errors.append(f"{clip.slug}: {e}")
-            if fail_fast:
-                break
-            continue
-
-        try:
-            from shorts.cutter import WORKING_DIR
-            out_dir = Path("output") / name
-            out_dir.mkdir(parents=True, exist_ok=True)
-            output_path = out_dir / f"{name}_short_{i:02d}_{clip.slug}.mp4"
-
-            import shutil
-            shutil.copy2(result.video_path, output_path)
-            typer.echo(f"  -> {output_path}")
-
-            if audio:
-                audio_out = out_dir / f"{name}_short_{i:02d}_{clip.slug}_audio.wav"
-                extract_audio(output_path, f"{name}_short_{i:02d}_{clip.slug}_audio")
-                import shutil as _shutil
-                _shutil.move(str(RAW_DIR / f"{name}_short_{i:02d}_{clip.slug}_audio.wav"), str(audio_out))
-
-            success += 1
-        except RuntimeError as e:
-            typer.echo(f"Warning: export failed: {e}", err=True)
-            errors.append(f"{clip.slug}: {e}")
-            if fail_fast:
-                break
-
-    if errors:
-        for err in errors:
+    if summary.get("failed", 0) > 0:
+        for err in summary.get("errors", []):
             typer.echo(f"  FAILED: {err}", err=True)
-        typer.echo(f"Done: {success}/{len(clips)} clips exported, {len(errors)} failed")
+        typer.echo(f"Done: {summary['success']}/{summary['total']} clips exported, {summary['failed']} failed")
         raise typer.Exit(1)
 
-    typer.echo(f"Done: {success}/{len(clips)} clips exported")
+    typer.echo(f"Done: {summary['success']}/{summary['total']} clips exported")
 
 
 @app.command()
@@ -301,6 +226,7 @@ def run(
     bg_music: Optional[str] = typer.Option(None, "--bg-music", help="Background music URL or local file path"),
     bg_music_volume: Optional[float] = typer.Option(None, "--bg-music-volume", help="Background music volume level"),
     force: bool = typer.Option(False, "--force", help="Re-download, re-fetch, re-suggest, and re-render, ignoring cached artifacts"),
+    workers: int = typer.Option(1, "--workers", help="Number of clips to render in parallel (GPU/NVENC recommended for >1)"),
 ):
     """Run the full pipeline end-to-end.
 
@@ -352,6 +278,7 @@ def run(
             bg_music=bg_music,
             bg_music_volume=bg_music_volume,
             force=force,
+            workers=workers,
             log=typer.echo,
         )
     except (RuntimeError, FileNotFoundError) as e:

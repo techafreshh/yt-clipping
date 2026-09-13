@@ -150,6 +150,7 @@ Cut and export vertical shorts from clip specs.
 | `--captions` | Burn TikTok-style captions |
 | `--remove-silence` | Remove silent gaps for tighter pacing |
 | `--audio` | Export audio alongside video clips |
+| `--workers` | Render up to N clips in parallel (GPU/NVENC recommended for >1) |
 
 ### `shorts run`
 
@@ -168,6 +169,18 @@ Run the full pipeline end-to-end.
 | `--audio` | Extract audio for podcast clips |
 | `--whisper-model` | Whisper model for local transcription |
 | `--force` | Re-download, re-fetch, re-suggest, and re-render, ignoring all cached artifacts |
+| `--workers` | Render up to N clips in parallel (GPU/NVENC recommended for >1) |
+
+## Parallel Rendering
+
+`shorts cut --workers N` and `shorts run --workers N` render up to N clips
+concurrently — each clip is an independent ffmpeg process, so they genuinely
+overlap. Encoding automatically uses NVENC on a GPU when available, and one
+encode rarely saturates it, so 2–4 workers can cut render time dramatically
+(the Colab T4 handles 2–3 comfortably). On CPU-only machines keep
+`--workers 1`: concurrent libx264 jobs just compete for the same cores.
+Logs are tagged with the clip slug when workers > 1 so interleaved output
+stays readable.
 
 ## Resume & Caching
 
