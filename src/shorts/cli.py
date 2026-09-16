@@ -299,7 +299,7 @@ def config():
     """Print resolved configuration (secrets masked)."""
     from shorts.config import mask, settings
 
-    for name in settings.model_fields:
+    for name in type(settings).model_fields:
         value = getattr(settings, name)
         if value is not None and ("key" in name or "api" in name):
             typer.echo(f"{name.upper()}: {mask(str(value))}")
